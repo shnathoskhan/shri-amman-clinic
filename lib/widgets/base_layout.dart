@@ -36,12 +36,16 @@ class _BaseLayoutState extends State<BaseLayout> {
         return 1;
       case '/reports':
         return 2;
-      case '/branches':
+      case '/tests':
         return 3;
-      case '/users':
+      case '/branches':
         return 4;
-      case '/settings':
+      case '/users':
         return 5;
+      case '/refer':
+        return 6;
+      case '/settings':
+        return 7;
       default:
         return 0;
     }
@@ -59,12 +63,18 @@ class _BaseLayoutState extends State<BaseLayout> {
         context.go('/reports');
         break;
       case 3:
-        context.go('/branches');
+        context.go('/tests');
         break;
       case 4:
-        context.go('/users');
+        context.go('/branches');
         break;
       case 5:
+        context.go('/users');
+        break;
+      case 6:
+        context.go('/refer');
+        break;
+      case 7:
         context.go('/settings');
         break;
     }
@@ -191,9 +201,13 @@ class _BaseLayoutState extends State<BaseLayout> {
               NavigationRailDestination(
                   icon: Icon(Icons.insert_chart), label: Text('Reports')),
               NavigationRailDestination(
+                  icon: Icon(Icons.biotech_outlined), label: Text('Tests')),
+              NavigationRailDestination(
                   icon: Icon(Icons.business), label: Text('Branches')),
               NavigationRailDestination(
                   icon: Icon(Icons.group), label: Text('Users')),
+              NavigationRailDestination(
+                  icon: Icon(Icons.redeem), label: Text('Refer')),
               NavigationRailDestination(
                   icon: Icon(Icons.settings), label: Text('Settings')),
             ],

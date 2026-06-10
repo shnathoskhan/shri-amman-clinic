@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shri_amman_clinic/widgets/base_layout.dart';
+import 'package:barcode_widget/barcode_widget.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -10,9 +11,11 @@ const _kTitles = ['Mr', 'Mrs', 'Ms', 'Miss', 'Dr'];
 const _kGenders = ['Male', 'Female', 'Others'];
 const _kAgeUnits = ['Y', 'M', 'D'];
 const _kNationality = ['INDIA'];
-const _kDoctors = ['SELF', 'Dr. X', 'Dr. Y'];
-const _kLabs = ['Lab A', 'Lab B', 'Lab C'];
-const _kHospitals = ['Hospital A', 'Hospital B'];
+// Doctors, labs, and hospitals are loaded from Firestore (config/referrals).
+// Fallbacks used while loading or if doc is absent.
+const _kDoctorsFallback = <String>[];
+const _kLabsFallback = <String>[];
+const _kHospitalsFallback = <String>[];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Section model
@@ -79,9 +82,7 @@ class _PatientDialogState extends State<_PatientDialog> {
       _aadhaar,
       _height,
       _weight,
-      _bp,
-      _specimen,
-      _sid;
+      _bp;
 
   // --- Dropdown state ---
   late String _title,
@@ -91,6 +92,12 @@ class _PatientDialogState extends State<_PatientDialog> {
       _referralLab,
       _referralDr,
       _referralHospital;
+
+  // --- Firestore-loaded referral lists ---
+  List<String> _doctors = _kDoctorsFallback;
+  List<String> _labs = _kLabsFallback;
+  List<String> _hospitals = _kHospitalsFallback;
+  bool _referralListsLoading = true;
 
   Map<String, dynamic>? get _d => widget.doc?.data() as Map<String, dynamic>?;
   String _v(String k) => _d?[k]?.toString() ?? '';
@@ -107,23 +114,26 @@ class _PatientDialogState extends State<_PatientDialog> {
     _altMobile = TextEditingController(text: _v('altMobile'));
     _email = TextEditingController(text: _v('email'));
     _address = TextEditingController(text: _v('address'));
-    _city = TextEditingController(text: _v('city'));
+    _city = TextEditingController(text: (() {
+      final v = _v('city');
+      return v.isNotEmpty ? v : 'Salem';
+    })());
     _pincode = TextEditingController(text: _v('pincode'));
     _passport = TextEditingController(text: _v('passport'));
     _aadhaar = TextEditingController(text: _v('aadhaar'));
     _height = TextEditingController(text: _v('height'));
     _weight = TextEditingController(text: _v('weight'));
     _bp = TextEditingController(text: _v('bp'));
-    _specimen = TextEditingController(text: _v('specimen'));
-    _sid = TextEditingController(text: _v('sid'));
-
     _title = _d?['title'] ?? 'Mr';
     _gender = _d?['gender'] ?? 'Male';
     _ageUnit = _d?['ageUnit'] ?? 'Y';
     _nationality = _d?['nationality'] ?? 'INDIA';
     _referralLab = _d?['referralLab'] ?? '';
-    _referralDr = _d?['referralDr'] ?? 'SELF';
+    // Treat legacy 'SELF' value same as empty (None).
+    final rawDr = _d?['referralDr'] ?? '';
+    _referralDr = rawDr == 'SELF' ? '' : rawDr;
     _referralHospital = _d?['referralHospital'] ?? '';
+    _loadReferralLists();
   }
 
   @override
@@ -144,8 +154,6 @@ class _PatientDialogState extends State<_PatientDialog> {
       _height,
       _weight,
       _bp,
-      _specimen,
-      _sid
     ]) {
       c.dispose();
     }
@@ -174,7 +182,55 @@ class _PatientDialogState extends State<_PatientDialog> {
     setState(() => _activeSec = index);
   }
 
+  /// Loads names from the dedicated `doctors`, `labs`, and `hospitals` collections.
+  Future<void> _loadReferralLists() async {
+    try {
+      final results = await Future.wait([
+        FirebaseFirestore.instance.collection('doctors').get(),
+        FirebaseFirestore.instance.collection('labs').get(),
+        FirebaseFirestore.instance.collection('hospitals').get(),
+      ]);
+      if (!mounted) return;
+
+      List<String> _nameList(QuerySnapshot snap) => snap.docs
+          .map((d) => (d.data() as Map<String, dynamic>)['name']?.toString() ?? '')
+          .where((n) => n.isNotEmpty)
+          .toList()
+        ..sort();
+
+      setState(() {
+        _doctors = _nameList(results[0]);
+        _labs = _nameList(results[1]);
+        _hospitals = _nameList(results[2]);
+        // Reset selections that no longer exist in the loaded lists.
+        if (_referralDr.isNotEmpty && !_doctors.contains(_referralDr)) {
+          _referralDr = '';
+        }
+        if (_referralLab.isNotEmpty && !_labs.contains(_referralLab)) {
+          _referralLab = '';
+        }
+        if (_referralHospital.isNotEmpty &&
+            !_hospitals.contains(_referralHospital)) {
+          _referralHospital = '';
+        }
+        _referralListsLoading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _referralListsLoading = false);
+    }
+  }
+
   Future<void> _save() async {
+    if (_name.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Full name is required')));
+      return;
+    }
+    if (_mobile.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Mobile number is required')));
+      return;
+    }
     final data = {
       'title': _title,
       'fullName': _name.text.trim(),
@@ -197,8 +253,6 @@ class _PatientDialogState extends State<_PatientDialog> {
       'height': _height.text.trim(),
       'weight': _weight.text.trim(),
       'bp': _bp.text.trim(),
-      'specimen': _specimen.text.trim(),
-      'sid': _sid.text.trim(),
     };
     if (widget.doc == null) {
       final ref =
@@ -364,23 +418,41 @@ class _PatientDialogState extends State<_PatientDialog> {
         ],
       );
 
-  Widget _buildReferral() => Column(
+  Widget _buildReferral() {
+    if (_referralListsLoading) {
+      return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _secHeader('Referral', 3),
-          _row([
-            _drop('Referred by', _referralDr, _kDoctors,
-                (v) => setState(() => _referralDr = v)),
-            _drop('Outside lab', _referralLab, _kLabs,
-                (v) => setState(() => _referralLab = v),
-                allowEmpty: true),
-          ]),
-          const SizedBox(height: 12),
-          _drop('Referring hospital', _referralHospital, _kHospitals,
-              (v) => setState(() => _referralHospital = v),
-              allowEmpty: true),
+          const Center(
+            child: Padding(
+              padding: EdgeInsets.all(16),
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          ),
         ],
       );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _secHeader('Referral', 3),
+        _row([
+          // Doctors: allowEmpty = true so "— None —" behaves same as old SELF
+          _drop('Referred by (doctor)', _referralDr, _doctors,
+              (v) => setState(() => _referralDr = v),
+              allowEmpty: true),
+          _drop('Outside lab', _referralLab, _labs,
+              (v) => setState(() => _referralLab = v),
+              allowEmpty: true),
+        ]),
+        const SizedBox(height: 12),
+        _drop('Referring hospital', _referralHospital, _hospitals,
+            (v) => setState(() => _referralHospital = v),
+            allowEmpty: true),
+      ],
+    );
+  }
 
   Widget _buildClinical() => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -392,10 +464,6 @@ class _PatientDialogState extends State<_PatientDialog> {
             _field('BP', _bp, hint: '120/80'),
           ]),
           const SizedBox(height: 12),
-          _row([
-            _field('Specimen', _specimen),
-            _field('SID no.', _sid),
-          ]),
         ],
       );
 
@@ -423,14 +491,19 @@ class _PatientDialogState extends State<_PatientDialog> {
             children: [
               // ── Header ─────────────────────────────────────────────────────
               Container(
-                padding: const EdgeInsets.fromLTRB(20, 14, 12, 14),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                 decoration: BoxDecoration(
+                  color: cs.surfaceContainerLow,
                   border: Border(
                       bottom:
                           BorderSide(color: cs.outlineVariant.withOpacity(.5))),
                 ),
                 child: Row(
+                  crossAxisAlignment: CrossAxisAlignment
+                      .start, // Aligns elements neatly at the top if the column grows
                   children: [
+                    // 1. Icon Container
                     Container(
                       width: 32,
                       height: 32,
@@ -445,30 +518,59 @@ class _PatientDialogState extends State<_PatientDialog> {
                       ),
                     ),
                     const SizedBox(width: 12),
-                    Text(title,
-                        style: const TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.w500)),
-                    if (isNew) ...[
-                      const SizedBox(width: 10),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: cs.primary.withOpacity(.1),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text('New',
-                            style: TextStyle(
-                                fontSize: 11,
-                                color: cs.primary,
-                                fontWeight: FontWeight.w500)),
+
+                    // 2. Text & Barcode Info (Wrapped in Expanded to prevent overflow)
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            title,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow
+                                .ellipsis, // Safely handles ultra-long titles
+                          ),
+                          if (widget.isReadOnly && widget.doc != null) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              'Patient ID: ${(_d)?['id'] ?? ''}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: cs.onSurface.withOpacity(.6),
+                              ),
+                            ),
+                            const SizedBox(
+                                height:
+                                    8), // Slightly increased for breathing room
+                            BarcodeWidget(
+                              barcode: Barcode.code128(),
+                              data: (_d)?['id'] ?? '',
+                              width: 140,
+                              height: 40,
+                              drawText: false,
+                            ),
+                          ],
+                        ],
                       ),
-                    ],
-                    const Spacer(),
+                    ),
+
+                    const SizedBox(
+                        width: 8), // Small gap between content and close button
+
+                    // 3. Close Button
                     IconButton(
                       icon: const Icon(Icons.close, size: 18),
                       onPressed: () => Navigator.of(context).pop(),
                       visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets
+                          .zero, // Cleans up accidental internal padding
+                      constraints:
+                          const BoxConstraints(), // Shrinks hit target tightly around the compact icon
                     ),
                   ],
                 ),
@@ -492,6 +594,7 @@ class _PatientDialogState extends State<_PatientDialog> {
                         itemCount: _sections.length,
                         itemBuilder: (_, i) {
                           final active = _activeSec == i;
+                          // FIX: added missing `child:` parameter to AnimatedContainer
                           return InkWell(
                             onTap: () => _jumpTo(i),
                             child: AnimatedContainer(
@@ -715,7 +818,6 @@ class _PatientsScreenState extends State<PatientsScreen> {
                     // ── Top bar ───────────────────────────────────────────
                     Row(
                       children: [
-                        // Search
                         Expanded(
                           child: Container(
                             height: 40,

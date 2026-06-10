@@ -1,4 +1,5 @@
 // lib/router.dart
+import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'screens/home_screen.dart';
@@ -10,6 +11,31 @@ import 'screens/settings_screen.dart';
 import 'screens/admin/branch_management_screen.dart';
 import 'screens/admin/user_management_screen.dart';
 import 'screens/branch_picker_screen.dart';
+import 'screens/refer_screen.dart';
+import 'screens/tests_screen.dart';
+
+// Smooth fade + subtle upward-slide used for every route transition.
+CustomTransitionPage<void> _fadePage(
+  GoRouterState state,
+  Widget child,
+) =>
+    CustomTransitionPage<void>(
+      key: state.pageKey,
+      child: child,
+      transitionDuration: const Duration(milliseconds: 220),
+      reverseTransitionDuration: const Duration(milliseconds: 180),
+      transitionsBuilder: (context, animation, secondaryAnimation, child) {
+        final fade = CurvedAnimation(parent: animation, curve: Curves.easeOut);
+        final slide = Tween<Offset>(
+          begin: const Offset(0, 0.03), // very subtle upward slide
+          end: Offset.zero,
+        ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOut));
+        return FadeTransition(
+          opacity: fade,
+          child: SlideTransition(position: slide, child: child),
+        );
+      },
+    );
 
 // Define the GoRouter instance
 final GoRouter goRouter = GoRouter(
@@ -17,41 +43,55 @@ final GoRouter goRouter = GoRouter(
   routes: [
     GoRoute(
       path: '/',
-      builder: (context, state) => const HomeScreen(),
+      pageBuilder: (context, state) => _fadePage(state, const HomeScreen()),
     ),
     GoRoute(
       path: '/login',
-      builder: (context, state) => const LoginScreen(),
+      pageBuilder: (context, state) => _fadePage(state, const LoginScreen()),
     ),
     GoRoute(
       path: '/dashboard',
-      builder: (context, state) => const DashboardScreen(),
+      pageBuilder: (context, state) =>
+          _fadePage(state, const DashboardScreen()),
     ),
     GoRoute(
       path: '/patients',
-      builder: (context, state) => const PatientsScreen(),
+      pageBuilder: (context, state) => _fadePage(state, const PatientsScreen()),
     ),
     GoRoute(
       path: '/reports',
-      builder: (context, state) => const ReportsScreen(),
+      pageBuilder: (context, state) => _fadePage(state, const ReportsScreen()),
     ),
     GoRoute(
       path: '/settings',
-      builder: (context, state) => const SettingsScreen(),
+      pageBuilder: (context, state) => _fadePage(state, const SettingsScreen()),
+    ),
+    // Refer management
+    GoRoute(
+      path: '/refer',
+      pageBuilder: (context, state) => _fadePage(state, const ReferScreen()),
+    ),
+    // Test management (departments, sample types, parameters, profiles)
+    GoRoute(
+      path: '/tests',
+      pageBuilder: (context, state) => _fadePage(state, const TestsScreen()),
     ),
     // Admin‑only branch management
     GoRoute(
       path: '/branches',
-      builder: (context, state) => const BranchManagementScreen(),
+      pageBuilder: (context, state) =>
+          _fadePage(state, const BranchManagementScreen()),
     ),
     GoRoute(
       path: '/users',
-      builder: (context, state) => const UserManagementScreen(),
+      pageBuilder: (context, state) =>
+          _fadePage(state, const UserManagementScreen()),
     ),
     // Branch picker for dashboard side tab
     GoRoute(
       path: '/selectbranches',
-      builder: (context, state) => const BranchPickerScreen(),
+      pageBuilder: (context, state) =>
+          _fadePage(state, const BranchPickerScreen()),
     ),
   ],
   redirect: (context, state) {
