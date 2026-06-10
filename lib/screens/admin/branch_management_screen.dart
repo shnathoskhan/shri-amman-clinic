@@ -298,7 +298,8 @@ class _BranchManagementScreenState extends State<BranchManagementScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.business_outlined, size: 64, color: Colors.grey),
+                  const Icon(Icons.business_outlined,
+                      size: 64, color: Colors.grey),
                   const SizedBox(height: 16),
                   const Text(
                     'No branches found',
@@ -325,7 +326,8 @@ class _BranchManagementScreenState extends State<BranchManagementScreen> {
                   final data = d.data() as Map<String, dynamic>;
                   final name = (data['name'] ?? '').toString().toLowerCase();
                   final email = (data['email'] ?? '').toString().toLowerCase();
-                  final contact = (data['contact'] ?? '').toString().toLowerCase();
+                  final contact =
+                      (data['contact'] ?? '').toString().toLowerCase();
                   final city = (data['city'] ?? '').toString().toLowerCase();
                   final area = (data['area'] ?? '').toString().toLowerCase();
                   return name.contains(_filter) ||
@@ -347,8 +349,10 @@ class _BranchManagementScreenState extends State<BranchManagementScreen> {
           final dataSource = _BranchDataSource(
             docs: filtered,
             context: context,
-            onView: (doc) => _showBranchDialog(context, doc: doc, isReadOnly: true),
-            onEdit: (doc) => _showBranchDialog(context, doc: doc, isReadOnly: false),
+            onView: (doc) =>
+                _showBranchDialog(context, doc: doc, isReadOnly: true),
+            onEdit: (doc) =>
+                _showBranchDialog(context, doc: doc, isReadOnly: false),
             onDelete: (doc) => _showDeleteConfirmation(context, doc),
             sortAscending: _sortAscending,
           );
@@ -372,7 +376,8 @@ class _BranchManagementScreenState extends State<BranchManagementScreen> {
                                   Icon(
                                     Icons.search_off,
                                     size: 64,
-                                    color: Theme.of(context).colorScheme.secondary,
+                                    color:
+                                        Theme.of(context).colorScheme.secondary,
                                   ),
                                   const SizedBox(height: 16),
                                   const Text(
@@ -391,7 +396,9 @@ class _BranchManagementScreenState extends State<BranchManagementScreen> {
                                   elevation: 0,
                                   shape: RoundedRectangleBorder(
                                     side: BorderSide(
-                                      color: Theme.of(context).colorScheme.outlineVariant,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .outlineVariant,
                                     ),
                                     borderRadius: BorderRadius.circular(16),
                                   ),
@@ -402,11 +409,13 @@ class _BranchManagementScreenState extends State<BranchManagementScreen> {
                                 child: PaginatedDataTable(
                                   header: const Text(
                                     'Branches',
-                                    style: TextStyle(fontWeight: FontWeight.bold),
+                                    style:
+                                        TextStyle(fontWeight: FontWeight.bold),
                                   ),
                                   actions: [
                                     FilledButton.icon(
-                                      onPressed: () => _showBranchDialog(context),
+                                      onPressed: () =>
+                                          _showBranchDialog(context),
                                       label: const Text('Add Branch'),
                                       icon: const Icon(Icons.add),
                                     ),
@@ -420,20 +429,12 @@ class _BranchManagementScreenState extends State<BranchManagementScreen> {
                                   sortColumnIndex: 1,
                                   sortAscending: _sortAscending,
                                   onSelectAll: null,
-                                  columns: [
-                                    const DataColumn(label: Text('S.No')),
-                                    DataColumn(
-                                      label: const Text('Name'),
-                                      numeric: false,
-                                      onSort: (columnIndex, ascending) {
-                                        setState(() {
-                                          _sortAscending = ascending;
-                                        });
-                                      },
-                                    ),
-                                    const DataColumn(label: Text('Email')),
-                                    const DataColumn(label: Text('Phone')),
-                                    const DataColumn(label: Text('Actions')),
+                                  columns: const [
+                                    DataColumn(label: Text('S.No')),
+                                    DataColumn(label: Text('Full Name')),
+                                    DataColumn(label: Text('Phone')),
+                                    DataColumn(label: Text('Email')),
+                                    DataColumn(label: Text('Actions')),
                                   ],
                                   source: dataSource,
                                 ),
@@ -482,8 +483,8 @@ class _BranchDataSource extends DataTableSource {
       cells: [
         DataCell(Text((index + 1).toString())),
         DataCell(Text(name)),
-        DataCell(Text(email)),
         DataCell(Text(phone)),
+        DataCell(Text(email)),
         DataCell(Row(
           mainAxisSize: MainAxisSize.min,
           children: [
