@@ -86,10 +86,20 @@ class _TestsScreenState extends State<TestsScreen>
 
 String _getInitials(String name) {
   if (name.trim().isEmpty) return '?';
-  return name
-      .trim()
+  
+  // Remove text in parentheses
+  String cleanName = name.replaceAll(RegExp(r'\(.*?\)'), '');
+  // Replace non-alphabetic characters with spaces
+  cleanName = cleanName.replaceAll(RegExp(r'[^a-zA-Z]'), ' ');
+  
+  final words = cleanName
       .split(' ')
-      .where((w) => w.isNotEmpty)
+      .where((w) => w.trim().isNotEmpty)
+      .toList();
+      
+  if (words.isEmpty) return '?';
+  
+  return words
       .take(2)
       .map((w) => w[0].toUpperCase())
       .join();
@@ -183,7 +193,16 @@ class _TabPageState extends State<_TabPage> {
         if (snap.hasError) {
           return Center(child: Text('Error: ${snap.error}'));
         }
-        final all = snap.data?.docs ?? [];
+        final all = snap.data?.docs.toList() ?? [];
+        all.sort((a, b) {
+          final ma = a.data() as Map<String, dynamic>;
+          final mb = b.data() as Map<String, dynamic>;
+          final nameA =
+              (ma['name'] ?? ma['title'] ?? '').toString().toLowerCase();
+          final nameB =
+              (mb['name'] ?? mb['title'] ?? '').toString().toLowerCase();
+          return nameA.compareTo(nameB);
+        });
         final filtered = _q.isEmpty
             ? all
             : all.where((d) {
@@ -277,7 +296,7 @@ class _TabPageState extends State<_TabPage> {
                                   child: PaginatedDataTable(
                                     headingRowHeight: 40,
                                     dataRowMinHeight: 48,
-                                    dataRowMaxHeight: 56,
+                                    dataRowMaxHeight: double.infinity,
                                     rowsPerPage: _rpp,
                                     onRowsPerPageChanged: (v) {
                                       if (v != null) setState(() => _rpp = v);
@@ -311,7 +330,29 @@ class _DocSource extends DataTableSource {
   final DataRow? Function(int i, DocumentSnapshot doc) rowBuilder;
 
   @override
-  DataRow? getRow(int i) => i < docs.length ? rowBuilder(i, docs[i]) : null;
+  DataRow? getRow(int i) {
+    if (i >= docs.length) return null;
+    final row = rowBuilder(i, docs[i]);
+    if (row == null) return null;
+    return DataRow.byIndex(
+      index: i,
+      selected: row.selected,
+      onSelectChanged: row.onSelectChanged,
+      color: row.color,
+      cells: row.cells
+          .map((c) => DataCell(
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12.0),
+                  child: c.child,
+                ),
+                placeholder: c.placeholder,
+                showEditIcon: c.showEditIcon,
+                onTap: c.onTap,
+              ))
+          .toList(),
+    );
+  }
+
   @override
   bool get isRowCountApproximate => false;
   @override
@@ -638,6 +679,8 @@ class _ProfilesTabState extends State<_ProfilesTab> {
   void _openDialog({DocumentSnapshot? doc}) {
     final data = doc == null ? null : doc.data() as Map<String, dynamic>?;
     final titleCtrl = TextEditingController(text: data?['title'] ?? '');
+    final priceCtrl =
+        TextEditingController(text: data?['price']?.toString() ?? '');
 
     // Pre-populate selected parameters from the doc.
     final existingParams = (data?['parameters'] as List?)
@@ -650,6 +693,7 @@ class _ProfilesTabState extends State<_ProfilesTab> {
       barrierDismissible: false,
       builder: (c) => _ProfileDialog(
         titleCtrl: titleCtrl,
+        priceCtrl: priceCtrl,
         initialParams: existingParams,
         doc: doc,
       ),
@@ -669,11 +713,13 @@ class _ProfilesTabState extends State<_ProfilesTab> {
         DataColumn(label: Text('S.No')),
         DataColumn(label: Text('Profile title')),
         DataColumn(label: Text('Parameters')),
+        DataColumn(label: Text('Price')),
         DataColumn(label: Text('Actions')),
       ],
       rowBuilder: (i, doc) {
         final data = doc.data() as Map<String, dynamic>;
         final title = data['title'] ?? '';
+        final price = data['price'] ?? 0.0;
         final params =
             (data['parameters'] as List?)?.cast<Map<String, dynamic>>() ?? [];
         final initials = _getInitials(title);
@@ -701,25 +747,32 @@ class _ProfilesTabState extends State<_ProfilesTab> {
               ],
             )),
             DataCell(
-              params.isEmpty
-                  ? Text('—',
-                      style:
-                          TextStyle(color: cs.onSurface.withValues(alpha: .4)))
-                  : Wrap(
-                      spacing: 4,
-                      runSpacing: 2,
-                      children: params
-                          .map((p) => Chip(
-                                materialTapTargetSize:
-                                    MaterialTapTargetSize.shrinkWrap,
-                                visualDensity: VisualDensity.compact,
-                                label: Text(p['name'] ?? '',
-                                    style: const TextStyle(fontSize: 11)),
-                                padding: EdgeInsets.zero,
-                              ))
-                          .toList(),
-                    ),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 350),
+                child: params.isEmpty
+                    ? Text('—',
+                        style: TextStyle(
+                            color: cs.onSurface.withValues(alpha: .4)))
+                    : Wrap(
+                        spacing: 4,
+                        runSpacing: 4,
+                        children: params
+                            .map((p) => Chip(
+                                  materialTapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                  visualDensity: VisualDensity.compact,
+                                  label: Text(p['name'] ?? '',
+                                      style: const TextStyle(fontSize: 11)),
+                                  padding: EdgeInsets.zero,
+                                ))
+                            .toList(),
+                      ),
+              ),
             ),
+            DataCell(Text(
+                '₹${price is num ? (price % 1 == 0 ? price.toInt().toString() : price.toStringAsFixed(2)) : price}',
+                style: const TextStyle(
+                    fontSize: 13, fontWeight: FontWeight.w500))),
             DataCell(Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -751,10 +804,12 @@ class _ProfilesTabState extends State<_ProfilesTab> {
 class _ProfileDialog extends StatefulWidget {
   const _ProfileDialog({
     required this.titleCtrl,
+    required this.priceCtrl,
     required this.initialParams,
     this.doc,
   });
   final TextEditingController titleCtrl;
+  final TextEditingController priceCtrl;
   final List<Map<String, dynamic>> initialParams;
   final DocumentSnapshot? doc;
 
@@ -788,15 +843,24 @@ class _ProfileDialogState extends State<_ProfileDialog> {
           'price': data['price'] ?? 0.0,
         });
       }
+
+      double total = 0.0;
+      for (final p in _selected) {
+        total += (p['price'] as num?)?.toDouble() ?? 0.0;
+      }
+      widget.priceCtrl.text =
+          total % 1 == 0 ? total.toInt().toString() : total.toStringAsFixed(2);
     });
   }
 
   Future<void> _save() async {
     final title = widget.titleCtrl.text.trim();
     if (title.isEmpty) return;
+    final price = double.tryParse(widget.priceCtrl.text.trim()) ?? 0.0;
     final payload = {
       'title': title,
       'parameters': _selected,
+      'price': price,
     };
     if (widget.doc == null) {
       await FirebaseFirestore.instance.collection('profiles').add(payload);
@@ -849,16 +913,37 @@ class _ProfileDialogState extends State<_ProfileDialog> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Title field
-                    TextField(
-                      controller: widget.titleCtrl,
-                      autofocus: true,
-                      decoration: const InputDecoration(
-                        labelText: 'Profile title',
-                        hintText: 'e.g. Lipid Profile, CBC…',
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                      ),
+                    // Title and Price fields
+                    Row(
+                      children: [
+                        Expanded(
+                          flex: 2,
+                          child: TextField(
+                            controller: widget.titleCtrl,
+                            autofocus: true,
+                            decoration: const InputDecoration(
+                              labelText: 'Profile title',
+                              hintText: 'e.g. Lipid Profile, CBC…',
+                              border: OutlineInputBorder(),
+                              isDense: true,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          flex: 1,
+                          child: TextField(
+                            controller: widget.priceCtrl,
+                            keyboardType: const TextInputType.numberWithOptions(
+                                decimal: true),
+                            decoration: const InputDecoration(
+                              labelText: 'Price (₹)',
+                              border: OutlineInputBorder(),
+                              isDense: true,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 16),
 

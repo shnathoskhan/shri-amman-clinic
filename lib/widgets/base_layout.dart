@@ -25,7 +25,7 @@ class BaseLayout extends StatefulWidget {
 }
 
 class _BaseLayoutState extends State<BaseLayout> {
-  bool _isRailExtended = true;
+  static bool _isRailExtended = true;
   Timer? _timer;
   DateTime _now = DateTime.now();
   int _selectedIndexFromLocation(String location) {
@@ -38,11 +38,11 @@ class _BaseLayoutState extends State<BaseLayout> {
         return 2;
       case '/tests':
         return 3;
-      case '/branches':
-        return 4;
-      case '/users':
-        return 5;
       case '/refer':
+        return 4;
+      case '/branches':
+        return 5;
+      case '/users':
         return 6;
       case '/settings':
         return 7;
@@ -66,13 +66,13 @@ class _BaseLayoutState extends State<BaseLayout> {
         context.go('/tests');
         break;
       case 4:
-        context.go('/branches');
+        context.go('/refer');
         break;
       case 5:
-        context.go('/users');
+        context.go('/branches');
         break;
       case 6:
-        context.go('/refer');
+        context.go('/users');
         break;
       case 7:
         context.go('/settings');
@@ -106,7 +106,7 @@ class _BaseLayoutState extends State<BaseLayout> {
         elevation: 1,
         // Updated AppBar title Row with dynamic branch name and user name (clock moved to bottom bar)
         title: Text(
-          'SHRI AMMAN CLINIC',
+          'SHRI AMMAN CLINIC & LAB',
           style: TextStyle(
               color: Theme.of(context).colorScheme.primary,
               fontWeight: FontWeight.bold),
@@ -188,52 +188,96 @@ class _BaseLayoutState extends State<BaseLayout> {
       // Navigation Rail (Material 3) always visible, collapsible via leading icon
       body: Row(
         children: [
-          NavigationRail(
-            backgroundColor: Theme.of(context).colorScheme.onPrimary,
-            extended: _isRailExtended,
-            useIndicator: true,
-            indicatorColor: Theme.of(context).colorScheme.primary,
-            destinations: const [
-              NavigationRailDestination(
-                  icon: Icon(Icons.dashboard), label: Text('Dashboard')),
-              NavigationRailDestination(
-                  icon: Icon(Icons.people), label: Text('Patients')),
-              NavigationRailDestination(
-                  icon: Icon(Icons.insert_chart), label: Text('Reports')),
-              NavigationRailDestination(
-                  icon: Icon(Icons.biotech_outlined), label: Text('Tests')),
-              NavigationRailDestination(
-                  icon: Icon(Icons.business), label: Text('Branches')),
-              NavigationRailDestination(
-                  icon: Icon(Icons.group), label: Text('Users')),
-              NavigationRailDestination(
-                  icon: Icon(Icons.redeem), label: Text('Refer')),
-              NavigationRailDestination(
-                  icon: Icon(Icons.settings), label: Text('Settings')),
-            ],
-            trailingAtBottom: true,
-            trailing: IconButton(
-              icon: Icon(_isRailExtended ? Icons.arrow_back : Icons.menu),
-              onPressed: () {
-                setState(() {
-                  _isRailExtended = !_isRailExtended;
-                });
-              },
-            ),
-            selectedIndex: selectedIndex,
-            onDestinationSelected: (index) => _navigateTo(context, index),
-            unselectedLabelTextStyle: TextStyle(
-              color: Theme.of(context).colorScheme.secondary,
-            ),
-            selectedLabelTextStyle: TextStyle(
-              color: Theme.of(context).colorScheme.primary,
-              fontWeight: FontWeight.bold,
-            ),
-            selectedIconTheme: const IconThemeData(
-              color: Colors.white,
-            ),
-            unselectedIconTheme: IconThemeData(
-              color: Theme.of(context).colorScheme.primary,
+          Container(
+            color: Theme.of(context).colorScheme.onPrimary,
+            child: Column(
+              children: [
+                Expanded(
+                  child: NavigationRail(
+                    backgroundColor: Colors.transparent,
+                    extended: _isRailExtended,
+                    useIndicator: true,
+                    indicatorColor: Theme.of(context).colorScheme.primary,
+                    groupAlignment: -1.0,
+                    destinations: const [
+                      NavigationRailDestination(
+                          icon: Icon(Icons.dashboard),
+                          label: Text('Dashboard')),
+                      NavigationRailDestination(
+                          icon: Icon(Icons.people), label: Text('Patients')),
+                      NavigationRailDestination(
+                          icon: Icon(Icons.insert_chart),
+                          label: Text('Reports')),
+                      NavigationRailDestination(
+                          icon: Icon(Icons.biotech_outlined),
+                          label: Text('Tests')),
+                      NavigationRailDestination(
+                          icon: Icon(Icons.redeem), label: Text('Refer')),
+                    ],
+                    selectedIndex: selectedIndex < 5 ? selectedIndex : null,
+                    onDestinationSelected: (index) =>
+                        _navigateTo(context, index),
+                    unselectedLabelTextStyle: TextStyle(
+                      color: Theme.of(context).colorScheme.secondary,
+                    ),
+                    selectedLabelTextStyle: TextStyle(
+                      color: Theme.of(context).colorScheme.primary,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    selectedIconTheme: const IconThemeData(
+                      color: Colors.white,
+                    ),
+                    unselectedIconTheme: IconThemeData(
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                  ),
+                ),
+                SizedBox(
+                  height: 280,
+                  child: NavigationRail(
+                    backgroundColor: Colors.transparent,
+                    extended: _isRailExtended,
+                    useIndicator: true,
+                    indicatorColor: Theme.of(context).colorScheme.primary,
+                    groupAlignment: 1.0,
+                    destinations: const [
+                      NavigationRailDestination(
+                          icon: Icon(Icons.business), label: Text('Branches')),
+                      NavigationRailDestination(
+                          icon: Icon(Icons.group), label: Text('Users')),
+                      NavigationRailDestination(
+                          icon: Icon(Icons.settings), label: Text('Settings')),
+                    ],
+                    trailing: IconButton(
+                      icon: Icon(
+                        _isRailExtended ? Icons.arrow_back : Icons.menu,
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          _isRailExtended = !_isRailExtended;
+                        });
+                      },
+                    ),
+                    selectedIndex:
+                        selectedIndex >= 5 ? selectedIndex - 5 : null,
+                    onDestinationSelected: (index) =>
+                        _navigateTo(context, index + 5),
+                    unselectedLabelTextStyle: TextStyle(
+                      color: Theme.of(context).colorScheme.secondary,
+                    ),
+                    selectedLabelTextStyle: TextStyle(
+                      color: Theme.of(context).colorScheme.primary,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    selectedIconTheme: const IconThemeData(
+                      color: Colors.white,
+                    ),
+                    unselectedIconTheme: IconThemeData(
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
           const VerticalDivider(thickness: 0.2, width: 0.2),
@@ -242,16 +286,22 @@ class _BaseLayoutState extends State<BaseLayout> {
       ),
       floatingActionButton: widget.floatingActionButton,
       bottomNavigationBar: BottomAppBar(
-        elevation: 20,
-        shadowColor: Colors.grey,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('© 2026 Shri Amman Clinic'),
-              Text(DateFormat('EEEE, d MMMM y, hh:mm:ss a').format(_now)),
-            ],
+        child: Align(
+          alignment: Alignment.center,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: SizedBox(
+              width: double.infinity,
+              child: Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  const Text('© 2026 Shri Amman Clinic & Lab'),
+                  const SizedBox(width: 16),
+                  Text(DateFormat('EEEE, d MMMM y, hh:mm:ss a').format(_now)),
+                ],
+              ),
+            ),
           ),
         ),
       ),
