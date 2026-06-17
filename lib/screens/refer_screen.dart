@@ -327,177 +327,218 @@ class _DoctorsTab extends StatefulWidget {
 }
 
 class _DoctorsTabState extends State<_DoctorsTab> {
-  void _openDialog({DocumentSnapshot? doc}) {
+  void _openDialog(List<DocumentSnapshot> hospitals, {DocumentSnapshot? doc}) {
     final data = doc == null ? null : doc.data() as Map<String, dynamic>?;
     final nameCtrl = TextEditingController(text: data?['name'] ?? '');
     final phoneCtrl = TextEditingController(text: data?['phone'] ?? '');
     final emailCtrl = TextEditingController(text: data?['email'] ?? '');
     final specialistCtrl =
         TextEditingController(text: data?['specialist'] ?? '');
-    final hospitalCtrl = TextEditingController(text: data?['hospital'] ?? '');
+        
+    String? selectedHospital = data?['hospital'];
+    if (selectedHospital != null && selectedHospital.isEmpty) {
+      selectedHospital = null;
+    }
+    // Ensure the selected hospital exists in the list to avoid dropdown errors
+    if (selectedHospital != null && !hospitals.any((h) => h.id == selectedHospital)) {
+      selectedHospital = null;
+    }
 
     showDialog(
       context: context,
-      builder: (c) => AlertDialog(
-        title: Text(doc == null ? 'Add Doctor' : 'Edit Doctor'),
-        content: SizedBox(
-          width: 420,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameCtrl,
-                autofocus: true,
-                decoration: const InputDecoration(
-                    labelText: 'Doctor name', border: OutlineInputBorder()),
-              ),
-              const SizedBox(height: 12),
-              Row(
+      builder: (c) => StatefulBuilder(
+        builder: (context, setState) {
+          return AlertDialog(
+            title: Text(doc == null ? 'Add Doctor' : 'Edit Doctor'),
+            content: SizedBox(
+              width: 420,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Expanded(
-                    child: TextField(
-                      controller: phoneCtrl,
-                      decoration: const InputDecoration(
-                          labelText: 'Phone', border: OutlineInputBorder()),
-                    ),
+                  TextField(
+                    controller: nameCtrl,
+                    autofocus: true,
+                    decoration: const InputDecoration(
+                        labelText: 'Doctor name', border: OutlineInputBorder()),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextField(
-                      controller: emailCtrl,
-                      decoration: const InputDecoration(
-                          labelText: 'Email', border: OutlineInputBorder()),
-                    ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: phoneCtrl,
+                          decoration: const InputDecoration(
+                              labelText: 'Phone', border: OutlineInputBorder()),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TextField(
+                          controller: emailCtrl,
+                          decoration: const InputDecoration(
+                              labelText: 'Email', border: OutlineInputBorder()),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: specialistCtrl,
+                          decoration: const InputDecoration(
+                              labelText: 'Specialist / Specialty',
+                              border: OutlineInputBorder()),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          decoration: const InputDecoration(
+                              labelText: 'Hospital', border: OutlineInputBorder()),
+                          value: selectedHospital,
+                          items: [
+                            const DropdownMenuItem(value: null, child: Text('None')),
+                            ...hospitals.map((h) {
+                              final hd = h.data() as Map<String, dynamic>;
+                              return DropdownMenuItem(
+                                value: h.id,
+                                child: Text(hd['name']?.toString() ?? 'Unknown'),
+                              );
+                            }),
+                          ],
+                          onChanged: (v) => setState(() => selectedHospital = v),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: specialistCtrl,
-                      decoration: const InputDecoration(
-                          labelText: 'Specialist / Specialty',
-                          border: OutlineInputBorder()),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextField(
-                      controller: hospitalCtrl,
-                      decoration: const InputDecoration(
-                          labelText: 'Hospital', border: OutlineInputBorder()),
-                    ),
-                  ),
-                ],
+            ),
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.pop(c), child: const Text('Cancel')),
+              FilledButton(
+                onPressed: () async {
+                  final name = nameCtrl.text.trim();
+                  if (name.isEmpty) return;
+                  final payload = {
+                    'name': name,
+                    'phone': phoneCtrl.text.trim(),
+                    'email': emailCtrl.text.trim(),
+                    'specialist': specialistCtrl.text.trim(),
+                    'hospital': selectedHospital ?? '',
+                  };
+                  final col = FirebaseFirestore.instance.collection('doctors');
+                  if (doc == null) {
+                    await col.add(payload);
+                  } else {
+                    await doc.reference.update(payload);
+                  }
+                  if (c.mounted) Navigator.pop(c);
+                },
+                child: Text(doc == null ? 'Add' : 'Save'),
               ),
             ],
-          ),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(c), child: const Text('Cancel')),
-          FilledButton(
-            onPressed: () async {
-              final name = nameCtrl.text.trim();
-              if (name.isEmpty) return;
-              final payload = {
-                'name': name,
-                'phone': phoneCtrl.text.trim(),
-                'email': emailCtrl.text.trim(),
-                'specialist': specialistCtrl.text.trim(),
-                'hospital': hospitalCtrl.text.trim(),
-              };
-              final col = FirebaseFirestore.instance.collection('doctors');
-              if (doc == null) {
-                await col.add(payload);
-              } else {
-                await doc.reference.update(payload);
-              }
-              if (c.mounted) Navigator.pop(c);
-            },
-            child: Text(doc == null ? 'Add' : 'Save'),
-          ),
-        ],
+          );
+        }
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return _TabPage(
-      collection: 'doctors',
-      addLabel: 'Add Doctor',
-      onAdd: () => _openDialog(),
-      filterFn: (m, q) =>
-          (m['name'] ?? '').toString().toLowerCase().contains(q) ||
-          (m['phone'] ?? '').toString().toLowerCase().contains(q) ||
-          (m['specialist'] ?? '').toString().toLowerCase().contains(q),
-      columns: const [
-        DataColumn(label: Text('S.No')),
-        DataColumn(label: Text('Doctor name')),
-        DataColumn(label: Text('Phone')),
-        DataColumn(label: Text('Email')),
-        DataColumn(label: Text('Specialist')),
-        DataColumn(label: Text('Hospital')),
-        DataColumn(label: Text('Actions')),
-      ],
-      rowBuilder: (i, doc) {
-        final data = doc.data() as Map<String, dynamic>;
-        final name = data['name'] ?? '';
-        final initials = _getInitials(name);
-        final cs = Theme.of(context).colorScheme;
-        return DataRow.byIndex(
-          index: i,
-          cells: [
-            DataCell(Text('${i + 1}',
-                style: TextStyle(
-                    fontSize: 13, color: cs.onSurface.withValues(alpha: .4)))),
-            DataCell(Row(
-              children: [
-                CircleAvatar(
-                  radius: 16,
-                  backgroundColor: cs.primaryContainer,
-                  child: Text(initials,
-                      style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: cs.onPrimaryContainer)),
-                ),
-                const SizedBox(width: 10),
-                Text(name,
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w500, fontSize: 14)),
-              ],
-            )),
-            DataCell(Text(data['phone'] ?? '',
-                style: const TextStyle(fontSize: 13))),
-            DataCell(Text(data['email'] ?? '',
-                style: const TextStyle(fontSize: 13))),
-            DataCell(Text(data['specialist'] ?? '',
-                style: const TextStyle(fontSize: 13))),
-            DataCell(Text(data['hospital'] ?? '',
-                style: const TextStyle(fontSize: 13))),
-            DataCell(Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _Btn(
-                    icon: Icons.edit_outlined,
-                    tip: 'Edit',
-                    onTap: () => _openDialog(doc: doc)),
-                _Btn(
-                    icon: Icons.delete_outline_rounded,
-                    tip: 'Delete',
-                    color: Colors.redAccent,
-                    onTap: () async {
-                      if (await _confirmDelete(context, name)) {
-                        await doc.reference.delete();
-                      }
-                    }),
-              ],
-            )),
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance.collection('hospitals').snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        final hospitals = snapshot.data!.docs;
+        final hospitalMap = {
+          for (var h in hospitals)
+            h.id: (h.data() as Map<String, dynamic>)['name']?.toString() ?? 'Unknown'
+        };
+
+        return _TabPage(
+          collection: 'doctors',
+          addLabel: 'Add Doctor',
+          onAdd: () => _openDialog(hospitals),
+          filterFn: (m, q) =>
+              (m['name'] ?? '').toString().toLowerCase().contains(q) ||
+              (m['phone'] ?? '').toString().toLowerCase().contains(q) ||
+              (m['specialist'] ?? '').toString().toLowerCase().contains(q),
+          columns: const [
+            DataColumn(label: Text('S.No')),
+            DataColumn(label: Text('Doctor name')),
+            DataColumn(label: Text('Phone')),
+            DataColumn(label: Text('Email')),
+            DataColumn(label: Text('Specialist')),
+            DataColumn(label: Text('Hospital')),
+            DataColumn(label: Text('Actions')),
           ],
+          rowBuilder: (i, doc) {
+            final data = doc.data() as Map<String, dynamic>;
+            final name = data['name'] ?? '';
+            final initials = _getInitials(name);
+            final cs = Theme.of(context).colorScheme;
+            
+            final hospitalId = data['hospital'] ?? '';
+            final hospitalName = hospitalId.isEmpty ? '' : (hospitalMap[hospitalId] ?? hospitalId);
+
+            return DataRow.byIndex(
+              index: i,
+              cells: [
+                DataCell(Text('${i + 1}',
+                    style: TextStyle(
+                        fontSize: 13, color: cs.onSurface.withValues(alpha: .4)))),
+                DataCell(Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 16,
+                      backgroundColor: cs.primaryContainer,
+                      child: Text(initials,
+                          style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: cs.onPrimaryContainer)),
+                    ),
+                    const SizedBox(width: 10),
+                    Text(name,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w500, fontSize: 14)),
+                  ],
+                )),
+                DataCell(Text(data['phone'] ?? '',
+                    style: const TextStyle(fontSize: 13))),
+                DataCell(Text(data['email'] ?? '',
+                    style: const TextStyle(fontSize: 13))),
+                DataCell(Text(data['specialist'] ?? '',
+                    style: const TextStyle(fontSize: 13))),
+                DataCell(Text(hospitalName,
+                    style: const TextStyle(fontSize: 13))),
+                DataCell(Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _Btn(
+                        icon: Icons.edit_outlined,
+                        tip: 'Edit',
+                        onTap: () => _openDialog(hospitals, doc: doc)),
+                    _Btn(
+                        icon: Icons.delete_outline_rounded,
+                        tip: 'Delete',
+                        color: Colors.redAccent,
+                        onTap: () async {
+                          if (await _confirmDelete(context, name)) {
+                            await doc.reference.delete();
+                          }
+                        }),
+                  ],
+                )),
+              ],
+            );
+          },
         );
       },
     );
