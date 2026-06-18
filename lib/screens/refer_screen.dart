@@ -157,7 +157,7 @@ class _TabPage extends StatefulWidget {
 class _TabPageState extends State<_TabPage> {
   String _q = '';
   int _rpp = 10;
-  bool _asc = true;
+  final bool _asc = true;
   final _searchCtrl = TextEditingController();
 
   @override
@@ -334,116 +334,117 @@ class _DoctorsTabState extends State<_DoctorsTab> {
     final emailCtrl = TextEditingController(text: data?['email'] ?? '');
     final specialistCtrl =
         TextEditingController(text: data?['specialist'] ?? '');
-        
+
     String? selectedHospital = data?['hospital'];
     if (selectedHospital != null && selectedHospital.isEmpty) {
       selectedHospital = null;
     }
     // Ensure the selected hospital exists in the list to avoid dropdown errors
-    if (selectedHospital != null && !hospitals.any((h) => h.id == selectedHospital)) {
+    if (selectedHospital != null &&
+        !hospitals.any((h) => h.id == selectedHospital)) {
       selectedHospital = null;
     }
 
     showDialog(
       context: context,
-      builder: (c) => StatefulBuilder(
-        builder: (context, setState) {
-          return AlertDialog(
-            title: Text(doc == null ? 'Add Doctor' : 'Edit Doctor'),
-            content: SizedBox(
-              width: 420,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: nameCtrl,
-                    autofocus: true,
-                    decoration: const InputDecoration(
-                        labelText: 'Doctor name', border: OutlineInputBorder()),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: phoneCtrl,
-                          decoration: const InputDecoration(
-                              labelText: 'Phone', border: OutlineInputBorder()),
-                        ),
+      builder: (c) => StatefulBuilder(builder: (context, setState) {
+        return AlertDialog(
+          title: Text(doc == null ? 'Add Doctor' : 'Edit Doctor'),
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nameCtrl,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                      labelText: 'Doctor name', border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: phoneCtrl,
+                        decoration: const InputDecoration(
+                            labelText: 'Phone', border: OutlineInputBorder()),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: TextField(
-                          controller: emailCtrl,
-                          decoration: const InputDecoration(
-                              labelText: 'Email', border: OutlineInputBorder()),
-                        ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextField(
+                        controller: emailCtrl,
+                        decoration: const InputDecoration(
+                            labelText: 'Email', border: OutlineInputBorder()),
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: specialistCtrl,
-                          decoration: const InputDecoration(
-                              labelText: 'Specialist / Specialty',
-                              border: OutlineInputBorder()),
-                        ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: specialistCtrl,
+                        decoration: const InputDecoration(
+                            labelText: 'Specialist / Specialty',
+                            border: OutlineInputBorder()),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: DropdownButtonFormField<String>(
-                          decoration: const InputDecoration(
-                              labelText: 'Hospital', border: OutlineInputBorder()),
-                          value: selectedHospital,
-                          items: [
-                            const DropdownMenuItem(value: null, child: Text('None')),
-                            ...hospitals.map((h) {
-                              final hd = h.data() as Map<String, dynamic>;
-                              return DropdownMenuItem(
-                                value: h.id,
-                                child: Text(hd['name']?.toString() ?? 'Unknown'),
-                              );
-                            }),
-                          ],
-                          onChanged: (v) => setState(() => selectedHospital = v),
-                        ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        decoration: const InputDecoration(
+                            labelText: 'Hospital',
+                            border: OutlineInputBorder()),
+                        initialValue: selectedHospital,
+                        items: [
+                          const DropdownMenuItem(
+                              value: null, child: Text('None')),
+                          ...hospitals.map((h) {
+                            final hd = h.data() as Map<String, dynamic>;
+                            return DropdownMenuItem(
+                              value: h.id,
+                              child: Text(hd['name']?.toString() ?? 'Unknown'),
+                            );
+                          }),
+                        ],
+                        onChanged: (v) => setState(() => selectedHospital = v),
                       ),
-                    ],
-                  ),
-                ],
-              ),
+                    ),
+                  ],
+                ),
+              ],
             ),
-            actions: [
-              TextButton(
-                  onPressed: () => Navigator.pop(c), child: const Text('Cancel')),
-              FilledButton(
-                onPressed: () async {
-                  final name = nameCtrl.text.trim();
-                  if (name.isEmpty) return;
-                  final payload = {
-                    'name': name,
-                    'phone': phoneCtrl.text.trim(),
-                    'email': emailCtrl.text.trim(),
-                    'specialist': specialistCtrl.text.trim(),
-                    'hospital': selectedHospital ?? '',
-                  };
-                  final col = FirebaseFirestore.instance.collection('doctors');
-                  if (doc == null) {
-                    await col.add(payload);
-                  } else {
-                    await doc.reference.update(payload);
-                  }
-                  if (c.mounted) Navigator.pop(c);
-                },
-                child: Text(doc == null ? 'Add' : 'Save'),
-              ),
-            ],
-          );
-        }
-      ),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(c), child: const Text('Cancel')),
+            FilledButton(
+              onPressed: () async {
+                final name = nameCtrl.text.trim();
+                if (name.isEmpty) return;
+                final payload = {
+                  'name': name,
+                  'phone': phoneCtrl.text.trim(),
+                  'email': emailCtrl.text.trim(),
+                  'specialist': specialistCtrl.text.trim(),
+                  'hospital': selectedHospital ?? '',
+                };
+                final col = FirebaseFirestore.instance.collection('doctors');
+                if (doc == null) {
+                  await col.add(payload);
+                } else {
+                  await doc.reference.update(payload);
+                }
+                if (c.mounted) Navigator.pop(c);
+              },
+              child: Text(doc == null ? 'Add' : 'Save'),
+            ),
+          ],
+        );
+      }),
     );
   }
 
@@ -458,7 +459,8 @@ class _DoctorsTabState extends State<_DoctorsTab> {
         final hospitals = snapshot.data!.docs;
         final hospitalMap = {
           for (var h in hospitals)
-            h.id: (h.data() as Map<String, dynamic>)['name']?.toString() ?? 'Unknown'
+            h.id: (h.data() as Map<String, dynamic>)['name']?.toString() ??
+                'Unknown'
         };
 
         return _TabPage(
@@ -483,16 +485,19 @@ class _DoctorsTabState extends State<_DoctorsTab> {
             final name = data['name'] ?? '';
             final initials = _getInitials(name);
             final cs = Theme.of(context).colorScheme;
-            
+
             final hospitalId = data['hospital'] ?? '';
-            final hospitalName = hospitalId.isEmpty ? '' : (hospitalMap[hospitalId] ?? hospitalId);
+            final hospitalName = hospitalId.isEmpty
+                ? ''
+                : (hospitalMap[hospitalId] ?? hospitalId);
 
             return DataRow.byIndex(
               index: i,
               cells: [
                 DataCell(Text('${i + 1}',
                     style: TextStyle(
-                        fontSize: 13, color: cs.onSurface.withValues(alpha: .4)))),
+                        fontSize: 13,
+                        color: cs.onSurface.withValues(alpha: .4)))),
                 DataCell(Row(
                   children: [
                     CircleAvatar(
@@ -516,8 +521,8 @@ class _DoctorsTabState extends State<_DoctorsTab> {
                     style: const TextStyle(fontSize: 13))),
                 DataCell(Text(data['specialist'] ?? '',
                     style: const TextStyle(fontSize: 13))),
-                DataCell(Text(hospitalName,
-                    style: const TextStyle(fontSize: 13))),
+                DataCell(
+                    Text(hospitalName, style: const TextStyle(fontSize: 13))),
                 DataCell(Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [

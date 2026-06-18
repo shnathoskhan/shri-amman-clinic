@@ -1,4 +1,4 @@
-﻿// lib/screens/reports_screen.dart
+// lib/screens/reports_screen.dart
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shri_amman_clinic/widgets/base_layout.dart';
@@ -7,25 +7,32 @@ import 'package:barcode_widget/barcode_widget.dart';
 import 'package:shri_amman_clinic/utils/pdf_helper.dart';
 
 class ParameterData {
-  final String name;
-  final String unit;
-  final String refRange;
+  final TextEditingController nameCtrl;
+  final TextEditingController unitCtrl;
+  final TextEditingController refRangeCtrl;
   final TextEditingController valueCtrl;
 
   ParameterData({
-    required this.name,
-    required this.unit,
-    required this.refRange,
-  }) : valueCtrl = TextEditingController();
+    required String name,
+    required String unit,
+    required String refRange,
+    String value = '',
+  })  : nameCtrl = TextEditingController(text: name),
+        unitCtrl = TextEditingController(text: unit),
+        refRangeCtrl = TextEditingController(text: refRange),
+        valueCtrl = TextEditingController(text: value);
 
   void dispose() {
+    nameCtrl.dispose();
+    unitCtrl.dispose();
+    refRangeCtrl.dispose();
     valueCtrl.dispose();
   }
 
   Map<String, dynamic> toMap() => {
-        'name': name,
-        'unit': unit,
-        'referenceRange': refRange,
+        'name': nameCtrl.text.trim(),
+        'unit': unitCtrl.text.trim(),
+        'referenceRange': refRangeCtrl.text.trim(),
         'value': valueCtrl.text.trim(),
       };
 }
@@ -33,31 +40,38 @@ class ParameterData {
 class TestEntry {
   final bool isProfile;
   final String id;
-  final String title;
-  final double price;
+  final TextEditingController titleCtrl;
+  final TextEditingController priceCtrl;
   final List<ParameterData> parameters;
   bool isExpanded;
 
   TestEntry({
     required this.isProfile,
     required this.id,
-    required this.title,
-    required this.price,
+    required String title,
+    required double price,
     required this.parameters,
     this.isExpanded = true,
-  });
+  })  : titleCtrl = TextEditingController(text: title),
+        priceCtrl = TextEditingController(text: price.toStringAsFixed(2).replaceAll(RegExp(r'\.00$'), ''));
 
   void dispose() {
+    titleCtrl.dispose();
+    priceCtrl.dispose();
     for (var p in parameters) {
       p.dispose();
     }
   }
 
+  String get title => titleCtrl.text.trim();
+  double get price => double.tryParse(priceCtrl.text) ?? 0.0;
+
   Map<String, dynamic> toMap() => {
         'isProfile': isProfile,
         'id': id,
-        'title': title,
+        'title': titleCtrl.text.trim(),
         'price': price,
+        'isExpanded': isExpanded,
         'parameters': parameters.map((p) => p.toMap()).toList(),
       };
 }
@@ -89,6 +103,14 @@ class _AddReportDialogState extends State<_AddReportDialog> {
   List<DocumentSnapshot> _parameters = [];
   List<DocumentSnapshot> _profiles = [];
   List<DocumentSnapshot> _sampleTypes = [];
+
+  List<String> _doctors = [];
+  List<String> _hospitals = [];
+  List<String> _labs = [];
+
+  String _referralDr = '';
+  String _referralHospital = '';
+  String _referralLab = '';
 
   bool _loading = true;
   String _status = 'Pending';
@@ -138,6 +160,9 @@ class _AddReportDialogState extends State<_AddReportDialog> {
         fs.collection('parameters').get(),
         fs.collection('profiles').get(),
         fs.collection('sampleTypes').get(),
+        fs.collection('doctors').get(),
+        fs.collection('hospitals').get(),
+        fs.collection('labs').get(),
       ]);
 
       if (mounted) {
@@ -146,6 +171,17 @@ class _AddReportDialogState extends State<_AddReportDialog> {
           _parameters = snaps[1].docs;
           _profiles = snaps[2].docs;
           _sampleTypes = snaps[3].docs;
+
+          List<String> toNames(QuerySnapshot s) => s.docs
+              .map((d) =>
+                  (d.data() as Map<String, dynamic>)['name']?.toString() ?? '')
+              .where((n) => n.isNotEmpty)
+              .toList()
+            ..sort();
+
+          _doctors = toNames(snaps[4]);
+          _hospitals = toNames(snaps[5]);
+          _labs = toNames(snaps[6]);
 
           if (widget.doc != null) {
             _populateFromDoc();
@@ -179,6 +215,9 @@ class _AddReportDialogState extends State<_AddReportDialog> {
 
     _status = data['status'] as String? ?? 'Pending';
     _paymentStatus = data['paymentStatus'] as String? ?? 'Pending';
+    _referralDr = data['referralDr'] as String? ?? '';
+    _referralHospital = data['referralHospital'] as String? ?? '';
+    _referralLab = data['referralLab'] as String? ?? '';
     _grandTotalCtrl.text = data['totalPrice']?.toString() ?? '0';
 
     final testsList =
@@ -187,13 +226,12 @@ class _AddReportDialogState extends State<_AddReportDialog> {
       final paramsList =
           (t['parameters'] as List?)?.cast<Map<String, dynamic>>() ?? [];
       final params = paramsList.map((p) {
-        final pd = ParameterData(
+        return ParameterData(
           name: p['name'] ?? '',
           unit: p['unit'] ?? '',
           refRange: p['referenceRange'] ?? '',
+          value: p['value'] ?? '',
         );
-        pd.valueCtrl.text = p['value'] ?? '';
-        return pd;
       }).toList();
 
       _entries.add(TestEntry(
@@ -344,11 +382,20 @@ class _AddReportDialogState extends State<_AddReportDialog> {
       'patientRefId': _selectedPatient!.id,
       'patientId': patientId,
       'patientName': patientName,
+      'patientAge': '${pData['age'] ?? ''}${pData['ageUnit'] != null ? ' ${pData['ageUnit']}' : ''}',
+      'patientGender': pData['gender'] ?? '',
+      'patientMobile': pData['mobile'] ?? '',
+      'patientAddress': pData['address'] ?? '',
+      'patientCity': pData['city'] ?? '',
+      'patientPincode': pData['pincode'] ?? '',
       'sampleType': sampleTypeName,
       'updatedAt': FieldValue.serverTimestamp(),
       'totalPrice': grandTotal,
       'status': _status,
       'paymentStatus': _paymentStatus,
+      'referralDr': _referralDr,
+      'referralHospital': _referralHospital,
+      'referralLab': _referralLab,
       'tests': _entries.map((e) => e.toMap()).toList(),
     };
 
@@ -371,6 +418,34 @@ class _AddReportDialogState extends State<_AddReportDialog> {
             .showSnackBar(SnackBar(content: Text('Failed to save report: $e')));
       }
     }
+  }
+
+  Widget _drop(String label, String value, List<String> options,
+      Function(String) onChanged) {
+    final valid = value.isEmpty || options.contains(value) ? value : '';
+    final opts = ['— None —', ...options];
+    final current = valid.isEmpty ? '— None —' : valid;
+
+    return Expanded(
+      child: DropdownButtonFormField<String>(
+        initialValue: current,
+        decoration: InputDecoration(
+          labelText: label,
+          isDense: true,
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        ),
+        items: opts
+            .map((o) => DropdownMenuItem(
+                value: o, child: Text(o, style: const TextStyle(fontSize: 13))))
+            .toList(),
+        onChanged: (val) {
+          if (val == null) return;
+          onChanged(val == '— None —' ? '' : val);
+        },
+      ),
+    );
   }
 
   Widget _patientInfoChip(
@@ -419,7 +494,18 @@ class _AddReportDialogState extends State<_AddReportDialog> {
           return name.contains(q) || id.contains(q) || phone.contains(q);
         });
       },
-      onSelected: (doc) => setState(() => _selectedPatient = doc),
+      onSelected: (doc) {
+        setState(() {
+          _selectedPatient = doc;
+          final d = doc.data() as Map<String, dynamic>;
+          _referralDr = d['referralDr'] ?? '';
+          if (!_doctors.contains(_referralDr)) _referralDr = '';
+          _referralHospital = d['referralHospital'] ?? '';
+          if (!_hospitals.contains(_referralHospital)) _referralHospital = '';
+          _referralLab = d['referralLab'] ?? '';
+          if (!_labs.contains(_referralLab)) _referralLab = '';
+        });
+      },
       fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
         return TextField(
           controller: controller,
@@ -567,7 +653,7 @@ class _AddReportDialogState extends State<_AddReportDialog> {
           EdgeInsets.only(left: isIndented ? 32.0 : 0.0, top: 8.0, bottom: 8.0),
       child: Row(
         children: [
-          if (onRemove != null) ...[
+          if (onRemove != null && !widget.isReadOnly) ...[
             IconButton(
               icon: const Icon(Icons.remove_circle_outline,
                   color: Colors.red, size: 20),
@@ -579,17 +665,33 @@ class _AddReportDialogState extends State<_AddReportDialog> {
           ],
           Expanded(
             flex: 2,
-            child: Text(param.name,
-                style: const TextStyle(fontWeight: FontWeight.w500)),
+            child: widget.isReadOnly
+                ? Text(param.nameCtrl.text, style: const TextStyle(fontWeight: FontWeight.w500))
+                : TextField(
+                    controller: param.nameCtrl,
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                    decoration: const InputDecoration(isDense: true, border: InputBorder.none, hintText: 'Name'),
+                  ),
           ),
           Expanded(
             flex: 1,
-            child: Text(param.unit, style: const TextStyle(color: Colors.grey)),
+            child: widget.isReadOnly
+                ? Text(param.unitCtrl.text, style: const TextStyle(color: Colors.grey))
+                : TextField(
+                    controller: param.unitCtrl,
+                    style: const TextStyle(fontSize: 13, color: Colors.grey),
+                    decoration: const InputDecoration(isDense: true, border: InputBorder.none, hintText: 'Unit'),
+                  ),
           ),
           Expanded(
             flex: 2,
-            child: Text(param.refRange,
-                style: const TextStyle(color: Colors.grey)),
+            child: widget.isReadOnly
+                ? Text(param.refRangeCtrl.text, style: const TextStyle(color: Colors.grey))
+                : TextField(
+                    controller: param.refRangeCtrl,
+                    style: const TextStyle(fontSize: 13, color: Colors.grey),
+                    decoration: const InputDecoration(isDense: true, border: InputBorder.none, hintText: 'Ref. Range'),
+                  ),
           ),
           Expanded(
             flex: 2,
@@ -1016,6 +1118,66 @@ class _AddReportDialogState extends State<_AddReportDialog> {
                                           cs),
                                     ],
                                   ),
+                                  const SizedBox(height: 10),
+                                  Builder(builder: (context) {
+                                    if (!widget.isReadOnly) {
+                                      return Row(
+                                        children: [
+                                          _drop(
+                                              'Ref. Doctor',
+                                              _referralDr,
+                                              _doctors,
+                                              (v) => setState(
+                                                  () => _referralDr = v)),
+                                          const SizedBox(width: 8),
+                                          _drop(
+                                              'Ref. Hospital',
+                                              _referralHospital,
+                                              _hospitals,
+                                              (v) => setState(
+                                                  () => _referralHospital = v)),
+                                          const SizedBox(width: 8),
+                                          _drop(
+                                              'Ref. Lab',
+                                              _referralLab,
+                                              _labs,
+                                              (v) => setState(
+                                                  () => _referralLab = v)),
+                                        ],
+                                      );
+                                    }
+
+                                    bool isValid(String s) =>
+                                        s.isNotEmpty && s != '— None —';
+                                    String referValue = 'Self';
+                                    IconData referIcon = Icons.person_outline;
+                                    String referLabel = 'Referred By';
+
+                                    if (isValid(_referralDr)) {
+                                      referValue = _referralDr;
+                                      referIcon =
+                                          Icons.medical_services_outlined;
+                                      referLabel = 'Ref. Doctor';
+                                    } else if (isValid(_referralHospital)) {
+                                      referValue = _referralHospital;
+                                      referIcon = Icons.local_hospital_outlined;
+                                      referLabel = 'Ref. Hospital';
+                                    } else if (isValid(_referralLab)) {
+                                      referValue = _referralLab;
+                                      referIcon = Icons.science_outlined;
+                                      referLabel = 'Ref. Lab';
+                                    }
+
+                                    return Row(
+                                      children: [
+                                        _patientInfoChip(referIcon, referLabel,
+                                            referValue, cs),
+                                        const SizedBox(width: 16),
+                                        const Expanded(
+                                            flex: 3, child: SizedBox.shrink()),
+                                      ],
+                                    );
+                                  }),
                                 ],
                               ],
                             );
@@ -1136,8 +1298,7 @@ class _AddReportDialogState extends State<_AddReportDialog> {
                                 children: [
                                   if (index > 0)
                                     const Divider(height: 1, thickness: 1),
-                                  if (entry.isProfile) ...[
-                                    // Profile Header
+                                  // Profile / Parameter Header
                                     Container(
                                       padding: const EdgeInsets.symmetric(
                                           horizontal: 12, vertical: 8),
@@ -1165,15 +1326,47 @@ class _AddReportDialogState extends State<_AddReportDialog> {
                                           Icon(Icons.playlist_add_check,
                                               size: 18, color: cs.primary),
                                           const SizedBox(width: 8),
-                                          Text(entry.title,
-                                              style: TextStyle(
-                                                  fontWeight: FontWeight.bold,
-                                                  color: cs.primary)),
-                                          const Spacer(),
-                                          Text('Subtotal: ₹ ${entry.price}',
-                                              style: TextStyle(
-                                                  color: cs.primary,
-                                                  fontWeight: FontWeight.w600)),
+                                          Expanded(
+                                            child: widget.isReadOnly
+                                                ? Text(entry.titleCtrl.text,
+                                                    style: TextStyle(
+                                                        fontWeight: FontWeight.bold,
+                                                        color: cs.primary))
+                                                : TextField(
+                                                    controller: entry.titleCtrl,
+                                                    style: TextStyle(
+                                                        fontWeight: FontWeight.bold,
+                                                        color: cs.primary,
+                                                        fontSize: 14),
+                                                    decoration: const InputDecoration(
+                                                      isDense: true,
+                                                      border: InputBorder.none,
+                                                      hintText: 'Profile Title',
+                                                    ),
+                                                  ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          const Text('Subtotal: ₹ ',
+                                              style: TextStyle(fontWeight: FontWeight.w600)),
+                                          widget.isReadOnly
+                                              ? Text('${entry.price}',
+                                                  style: TextStyle(
+                                                      color: cs.primary,
+                                                      fontWeight: FontWeight.w600))
+                                              : SizedBox(
+                                                  width: 60,
+                                                  child: TextField(
+                                                    controller: entry.priceCtrl,
+                                                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                                    style: TextStyle(color: cs.primary, fontWeight: FontWeight.w600, fontSize: 13),
+                                                    decoration: const InputDecoration(
+                                                      isDense: true,
+                                                      border: InputBorder.none,
+                                                      hintText: '0.00',
+                                                    ),
+                                                    onChanged: (_) => _updateTotal(),
+                                                  ),
+                                                ),
                                           const SizedBox(width: 8),
                                           IconButton(
                                             icon: Icon(
@@ -1215,44 +1408,7 @@ class _AddReportDialogState extends State<_AddReportDialog> {
                                           }).toList(),
                                         ),
                                       ),
-                                  ] else ...[
-                                    // Individual Parameter
-                                    Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 12, vertical: 8),
-                                      child: Row(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.center,
-                                        children: [
-                                          if (!widget.isReadOnly)
-                                            IconButton(
-                                              icon: const Icon(
-                                                  Icons.remove_circle_outline,
-                                                  color: Colors.red,
-                                                  size: 20),
-                                              onPressed: () {
-                                                setState(() =>
-                                                    _entries.removeAt(index));
-                                                _updateTotal();
-                                              },
-                                              padding: EdgeInsets.zero,
-                                              constraints:
-                                                  const BoxConstraints(),
-                                            ),
-                                          if (!widget.isReadOnly)
-                                            const SizedBox(width: 12),
-                                          Expanded(
-                                            child: _buildParameterRow(
-                                                entry.parameters.first, false),
-                                          ),
-                                          const SizedBox(width: 12),
-                                          Text('₹ ${entry.price}',
-                                              style: const TextStyle(
-                                                  fontWeight: FontWeight.w500)),
-                                        ],
-                                      ),
-                                    ),
-                                  ]
+                                  // No else block needed; individual parameters reuse profile UI.
                                 ],
                               );
                             }).toList(),
@@ -1291,7 +1447,7 @@ class _AddReportDialogState extends State<_AddReportDialog> {
                                 scale: 0.75,
                                 child: Switch(
                                   value: _status == 'Completed',
-                                  activeColor: Colors.green,
+                                  activeThumbColor: Colors.green,
                                   materialTapTargetSize:
                                       MaterialTapTargetSize.shrinkWrap,
                                   onChanged: (val) {
@@ -1342,7 +1498,7 @@ class _AddReportDialogState extends State<_AddReportDialog> {
                                 scale: 0.75,
                                 child: Switch(
                                   value: _paymentStatus == 'Paid',
-                                  activeColor: Colors.green,
+                                  activeThumbColor: Colors.green,
                                   materialTapTargetSize:
                                       MaterialTapTargetSize.shrinkWrap,
                                   onChanged: (val) {
@@ -1629,8 +1785,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                           dataRowMaxHeight: 56,
                                           rowsPerPage: _rowsPerPage,
                                           onRowsPerPageChanged: (v) {
-                                            if (v != null)
+                                            if (v != null) {
                                               setState(() => _rowsPerPage = v);
+                                            }
                                           },
                                           sortColumnIndex: 1,
                                           sortAscending: _sortAscending,
@@ -1776,7 +1933,7 @@ class _ReportDataSource extends DataTableSource {
                 scale: 0.7,
                 child: Switch(
                   value: status == 'Completed',
-                  activeColor: Colors.green,
+                  activeThumbColor: Colors.green,
                   materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   onChanged: (val) {
                     onStatusChange(doc, val ? 'Completed' : 'Pending');
@@ -1832,7 +1989,7 @@ class _ReportDataSource extends DataTableSource {
                 scale: 0.7,
                 child: Switch(
                   value: paymentStatus == 'Paid',
-                  activeColor: Colors.green,
+                  activeThumbColor: Colors.green,
                   materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   onChanged: (val) {
                     onPaymentChange(doc, val ? 'Paid' : 'Pending');

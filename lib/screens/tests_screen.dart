@@ -86,23 +86,17 @@ class _TestsScreenState extends State<TestsScreen>
 
 String _getInitials(String name) {
   if (name.trim().isEmpty) return '?';
-  
+
   // Remove text in parentheses
   String cleanName = name.replaceAll(RegExp(r'\(.*?\)'), '');
   // Replace non-alphabetic characters with spaces
   cleanName = cleanName.replaceAll(RegExp(r'[^a-zA-Z]'), ' ');
-  
-  final words = cleanName
-      .split(' ')
-      .where((w) => w.trim().isNotEmpty)
-      .toList();
-      
+
+  final words = cleanName.split(' ').where((w) => w.trim().isNotEmpty).toList();
+
   if (words.isEmpty) return '?';
-  
-  return words
-      .take(2)
-      .map((w) => w[0].toUpperCase())
-      .join();
+
+  return words.take(2).map((w) => w[0].toUpperCase()).join();
 }
 
 /// Small icon-button used in action columns.
@@ -171,7 +165,7 @@ class _TabPage extends StatefulWidget {
 class _TabPageState extends State<_TabPage> {
   String _q = '';
   int _rpp = 10;
-  bool _asc = true;
+  final bool _asc = true;
   final _searchCtrl = TextEditingController();
 
   @override

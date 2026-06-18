@@ -836,7 +836,10 @@ class _PatientsScreenState extends State<PatientsScreen> {
                           .contains(q) ||
                       (m['mobile'] ?? '').toString().contains(q) ||
                       (m['email'] ?? '').toString().toLowerCase().contains(q) ||
-                      (m['patient_id'] ?? '').toString().toLowerCase().contains(q);
+                      (m['patient_id'] ?? '')
+                          .toString()
+                          .toLowerCase()
+                          .contains(q);
                 }).toList())
             ..sort((a, b) {
               final na = (a['fullName'] ?? '').toString();
@@ -870,7 +873,8 @@ class _PatientsScreenState extends State<PatientsScreen> {
                                 border: InputBorder.none,
                                 contentPadding:
                                     const EdgeInsets.symmetric(vertical: 10),
-                                hintText: 'Search by name, ID, phone, or email…',
+                                hintText:
+                                    'Search by name, ID, phone, or email…',
                                 hintStyle: TextStyle(
                                     fontSize: 14,
                                     color: cs.onSurface.withOpacity(.4)),
@@ -912,11 +916,13 @@ class _PatientsScreenState extends State<PatientsScreen> {
                                 children: [
                                   Icon(Icons.search_off_rounded,
                                       size: 40,
-                                      color: cs.onSurface.withOpacity(.2)),
+                                      color:
+                                          cs.onSurface.withValues(alpha: .2)),
                                   const SizedBox(height: 8),
                                   Text('No patients found',
                                       style: TextStyle(
-                                          color: cs.onSurface.withOpacity(.4))),
+                                          color: cs.onSurface
+                                              .withValues(alpha: .4))),
                                 ],
                               ),
                             )
@@ -996,8 +1002,10 @@ class _PatientDataSource extends DataTableSource {
         DataCell(Text('${i + 1}',
             style: TextStyle(
                 fontSize: 13,
-                color:
-                    Theme.of(context).colorScheme.onSurface.withOpacity(.4)))),
+                color: Theme.of(context)
+                    .colorScheme
+                    .onSurface
+                    .withValues(alpha: .4)))),
         DataCell(Text(data['patient_id'] ?? '-',
             style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold))),
         DataCell(Row(
