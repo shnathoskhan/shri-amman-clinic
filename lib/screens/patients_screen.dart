@@ -193,7 +193,8 @@ class _PatientDialogState extends State<_PatientDialog> {
       if (!mounted) return;
 
       List<String> _nameList(QuerySnapshot snap) => snap.docs
-          .map((d) => (d.data() as Map<String, dynamic>)['name']?.toString() ?? '')
+          .map((d) =>
+              (d.data() as Map<String, dynamic>)['name']?.toString() ?? '')
           .where((n) => n.isNotEmpty)
           .toList()
         ..sort();
@@ -217,6 +218,39 @@ class _PatientDialogState extends State<_PatientDialog> {
       });
     } catch (_) {
       if (mounted) setState(() => _referralListsLoading = false);
+    }
+  }
+
+  Future<String> _generatePatientId() async {
+    final now = DateTime.now();
+    final yy = now.year.toString().substring(2);
+    final mm = now.month.toString().padLeft(2, '0');
+    final dd = now.day.toString().padLeft(2, '0');
+    final prefix = 'SAP$yy$mm$dd';
+
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('patients')
+          .where('patient_id', isGreaterThanOrEqualTo: prefix)
+          .where('patient_id', isLessThan: prefix + '\uf8ff')
+          .orderBy('patient_id', descending: true)
+          .limit(1)
+          .get();
+
+      int seq = 1;
+      if (snap.docs.isNotEmpty) {
+        final lastId = snap.docs.first.data()['patient_id'] as String?;
+        if (lastId != null && lastId.length >= prefix.length + 3) {
+          final lastSeqStr = lastId.substring(prefix.length);
+          final lastSeq = int.tryParse(lastSeqStr);
+          if (lastSeq != null) {
+            seq = lastSeq + 1;
+          }
+        }
+      }
+      return '$prefix${seq.toString().padLeft(3, '0')}';
+    } catch (e) {
+      return '${prefix}001';
     }
   }
 
@@ -255,6 +289,8 @@ class _PatientDialogState extends State<_PatientDialog> {
       'bp': _bp.text.trim(),
     };
     if (widget.doc == null) {
+      data['patient_id'] = await _generatePatientId();
+      data['createdAt'] = FieldValue.serverTimestamp();
       final ref =
           await FirebaseFirestore.instance.collection('patients').add(data);
       await ref.update({'id': ref.id});
@@ -538,7 +574,7 @@ class _PatientDialogState extends State<_PatientDialog> {
                           if (widget.isReadOnly && widget.doc != null) ...[
                             const SizedBox(height: 4),
                             Text(
-                              'Patient ID: ${(_d)?['id'] ?? ''}',
+                              'Patient ID: ${(_d)?['patient_id'] ?? ''}',
                               style: TextStyle(
                                 fontSize: 12,
                                 color: cs.onSurface.withOpacity(.6),
@@ -549,7 +585,7 @@ class _PatientDialogState extends State<_PatientDialog> {
                                     8), // Slightly increased for breathing room
                             BarcodeWidget(
                               barcode: Barcode.code128(),
-                              data: (_d)?['id'] ?? '',
+                              data: (_d)?['patient_id'] ?? '',
                               width: 140,
                               height: 40,
                               drawText: false,
@@ -799,7 +835,8 @@ class _PatientsScreenState extends State<PatientsScreen> {
                           .toLowerCase()
                           .contains(q) ||
                       (m['mobile'] ?? '').toString().contains(q) ||
-                      (m['email'] ?? '').toString().toLowerCase().contains(q);
+                      (m['email'] ?? '').toString().toLowerCase().contains(q) ||
+                      (m['patient_id'] ?? '').toString().toLowerCase().contains(q);
                 }).toList())
             ..sort((a, b) {
               final na = (a['fullName'] ?? '').toString();
@@ -833,7 +870,7 @@ class _PatientsScreenState extends State<PatientsScreen> {
                                 border: InputBorder.none,
                                 contentPadding:
                                     const EdgeInsets.symmetric(vertical: 10),
-                                hintText: 'Search by name, phone, or email…',
+                                hintText: 'Search by name, ID, phone, or email…',
                                 hintStyle: TextStyle(
                                     fontSize: 14,
                                     color: cs.onSurface.withOpacity(.4)),
@@ -895,6 +932,7 @@ class _PatientsScreenState extends State<PatientsScreen> {
                               sortAscending: _sortAscending,
                               columns: [
                                 const DataColumn(label: Text('S.No')),
+                                const DataColumn(label: Text('Patient ID')),
                                 DataColumn(
                                   label: const Text('Full name'),
                                   onSort: (_, asc) =>
@@ -960,6 +998,8 @@ class _PatientDataSource extends DataTableSource {
                 fontSize: 13,
                 color:
                     Theme.of(context).colorScheme.onSurface.withOpacity(.4)))),
+        DataCell(Text(data['patient_id'] ?? '-',
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold))),
         DataCell(Row(
           children: [
             CircleAvatar(

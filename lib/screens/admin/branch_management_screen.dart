@@ -7,14 +7,14 @@ class BranchManagementScreen extends StatefulWidget {
   const BranchManagementScreen({Key? key}) : super(key: key);
 
   @override
-  _BranchManagementScreenState createState() => _BranchManagementScreenState();
+  State<BranchManagementScreen> createState() => _BranchManagementScreenState();
 }
 
 class _BranchManagementScreenState extends State<BranchManagementScreen> {
   // Filtering
   String _filter = '';
   // Sorting
-  bool _sortAscending = true;
+  final bool _sortAscending = true;
   // Rows per page (default 10, max 50)
   int _rowsPerPage = 10;
 

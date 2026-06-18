@@ -14,7 +14,6 @@ import 'screens/branch_picker_screen.dart';
 import 'screens/refer_screen.dart';
 import 'screens/tests_screen.dart';
 
-// Smooth fade + subtle upward-slide used for every route transition.
 CustomTransitionPage<void> _fadePage(
   GoRouterState state,
   Widget child,
@@ -26,13 +25,9 @@ CustomTransitionPage<void> _fadePage(
       reverseTransitionDuration: const Duration(milliseconds: 180),
       transitionsBuilder: (context, animation, secondaryAnimation, child) {
         final fade = CurvedAnimation(parent: animation, curve: Curves.easeOut);
-        final slide = Tween<Offset>(
-          begin: const Offset(0, 0.03), // very subtle upward slide
-          end: Offset.zero,
-        ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOut));
         return FadeTransition(
           opacity: fade,
-          child: SlideTransition(position: slide, child: child),
+          child: child,
         );
       },
     );
