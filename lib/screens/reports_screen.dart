@@ -1,5 +1,6 @@
 // lib/screens/reports_screen.dart
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shri_amman_clinic/widgets/base_layout.dart';
 import 'package:intl/intl.dart';
@@ -51,9 +52,10 @@ class TestEntry {
     required String title,
     required double price,
     required this.parameters,
-    this.isExpanded = true,
+    this.isExpanded = false,
   })  : titleCtrl = TextEditingController(text: title),
-        priceCtrl = TextEditingController(text: price.toStringAsFixed(2).replaceAll(RegExp(r'\.00$'), ''));
+        priceCtrl = TextEditingController(
+            text: price.toStringAsFixed(2).replaceAll(RegExp(r'\.00$'), ''));
 
   void dispose() {
     titleCtrl.dispose();
@@ -103,6 +105,7 @@ class _AddReportDialogState extends State<_AddReportDialog> {
   List<DocumentSnapshot> _parameters = [];
   List<DocumentSnapshot> _profiles = [];
   List<DocumentSnapshot> _sampleTypes = [];
+  List<DocumentSnapshot> _departments = [];
 
   List<String> _doctors = [];
   List<String> _hospitals = [];
@@ -111,6 +114,7 @@ class _AddReportDialogState extends State<_AddReportDialog> {
   String _referralDr = '';
   String _referralHospital = '';
   String _referralLab = '';
+  DocumentSnapshot? _selectedDepartment;
 
   bool _loading = true;
   String _status = 'Pending';
@@ -123,12 +127,24 @@ class _AddReportDialogState extends State<_AddReportDialog> {
 
   final _patientSearchCtrl = TextEditingController();
   final _testSearchCtrl = TextEditingController();
+  final _sampleTypeSearchCtrl = TextEditingController();
+  final _departmentSearchCtrl = TextEditingController();
   TextEditingController? _internalTestCtrl;
   final _grandTotalCtrl = TextEditingController(text: '0');
+  final _sampleTypeSearchFocusNode = FocusNode();
+  final _departmentSearchFocusNode = FocusNode();
+  final _testSearchFocusNode = FocusNode();
+  String _discountMode = 'Amount';
+  final _discountCtrl = TextEditingController(text: '0');
+  final _discountFocusNode = FocusNode();
+  late final FocusNode _reportSwitchFocusNode;
+  late final FocusNode _paymentSwitchFocusNode;
 
   @override
   void initState() {
     super.initState();
+    _reportSwitchFocusNode = FocusNode(skipTraversal: true);
+    _paymentSwitchFocusNode = FocusNode(skipTraversal: true);
     _loadData();
   }
 
@@ -139,7 +155,16 @@ class _AddReportDialogState extends State<_AddReportDialog> {
     }
     _patientSearchCtrl.dispose();
     _testSearchCtrl.dispose();
+    _sampleTypeSearchCtrl.dispose();
+    _departmentSearchCtrl.dispose();
     _grandTotalCtrl.dispose();
+    _discountCtrl.dispose();
+    _discountFocusNode.dispose();
+    _sampleTypeSearchFocusNode.dispose();
+    _departmentSearchFocusNode.dispose();
+    _testSearchFocusNode.dispose();
+    _reportSwitchFocusNode.dispose();
+    _paymentSwitchFocusNode.dispose();
     super.dispose();
   }
 
@@ -148,8 +173,17 @@ class _AddReportDialogState extends State<_AddReportDialog> {
     for (var e in _entries) {
       total += e.price;
     }
+    final discVal = double.tryParse(_discountCtrl.text.trim()) ?? 0.0;
+    double discountAmount = 0.0;
+    if (_discountMode == 'Percentage') {
+      discountAmount = total * (discVal / 100.0);
+    } else {
+      discountAmount = discVal;
+    }
+    double grandTotal = total - discountAmount;
+    if (grandTotal < 0) grandTotal = 0.0;
     _grandTotalCtrl.text =
-        total.toStringAsFixed(2).replaceAll(RegExp(r'\.00$'), '');
+        grandTotal.toStringAsFixed(2).replaceAll(RegExp(r'\.00$'), '');
   }
 
   Future<void> _loadData() async {
@@ -163,6 +197,7 @@ class _AddReportDialogState extends State<_AddReportDialog> {
         fs.collection('doctors').get(),
         fs.collection('hospitals').get(),
         fs.collection('labs').get(),
+        fs.collection('departments').get(),
       ]);
 
       if (mounted) {
@@ -171,6 +206,7 @@ class _AddReportDialogState extends State<_AddReportDialog> {
           _parameters = snaps[1].docs;
           _profiles = snaps[2].docs;
           _sampleTypes = snaps[3].docs;
+          _departments = snaps[7].docs;
 
           List<String> toNames(QuerySnapshot s) => s.docs
               .map((d) =>
@@ -215,9 +251,16 @@ class _AddReportDialogState extends State<_AddReportDialog> {
 
     _status = data['status'] as String? ?? 'Pending';
     _paymentStatus = data['paymentStatus'] as String? ?? 'Pending';
+    _discountMode = data['discountMode'] as String? ?? 'Amount';
+    _discountCtrl.text = data['discount']?.toString() ?? '0';
     _referralDr = data['referralDr'] as String? ?? '';
     _referralHospital = data['referralHospital'] as String? ?? '';
     _referralLab = data['referralLab'] as String? ?? '';
+    try {
+      _selectedDepartment = _departments
+          .firstWhere((d) => (d.data() as Map)['name'] == data['department']);
+      _departmentSearchCtrl.text = data['department'] as String? ?? '';
+    } catch (_) {}
     _grandTotalCtrl.text = data['totalPrice']?.toString() ?? '0';
 
     final testsList =
@@ -382,7 +425,8 @@ class _AddReportDialogState extends State<_AddReportDialog> {
       'patientRefId': _selectedPatient!.id,
       'patientId': patientId,
       'patientName': patientName,
-      'patientAge': '${pData['age'] ?? ''}${pData['ageUnit'] != null ? ' ${pData['ageUnit']}' : ''}',
+      'patientAge':
+          '${pData['age'] ?? ''}${pData['ageUnit'] != null ? ' ${pData['ageUnit']}' : ''}',
       'patientGender': pData['gender'] ?? '',
       'patientMobile': pData['mobile'] ?? '',
       'patientAddress': pData['address'] ?? '',
@@ -396,7 +440,12 @@ class _AddReportDialogState extends State<_AddReportDialog> {
       'referralDr': _referralDr,
       'referralHospital': _referralHospital,
       'referralLab': _referralLab,
+      'department': _selectedDepartment != null
+          ? (_selectedDepartment!.data() as Map)['name'] ?? ''
+          : '',
       'tests': _entries.map((e) => e.toMap()).toList(),
+      'discount': double.tryParse(_discountCtrl.text.trim()) ?? 0.0,
+      'discountMode': _discountMode,
     };
 
     try {
@@ -427,23 +476,30 @@ class _AddReportDialogState extends State<_AddReportDialog> {
     final current = valid.isEmpty ? '— None —' : valid;
 
     return Expanded(
-      child: DropdownButtonFormField<String>(
-        initialValue: current,
-        decoration: InputDecoration(
-          labelText: label,
-          isDense: true,
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        ),
-        items: opts
-            .map((o) => DropdownMenuItem(
-                value: o, child: Text(o, style: const TextStyle(fontSize: 13))))
-            .toList(),
-        onChanged: (val) {
-          if (val == null) return;
-          onChanged(val == '— None —' ? '' : val);
+      child: Shortcuts(
+        shortcuts: const <ShortcutActivator, Intent>{
+          SingleActivator(LogicalKeyboardKey.enter): NextFocusIntent(),
+          SingleActivator(LogicalKeyboardKey.numpadEnter): NextFocusIntent(),
         },
+        child: DropdownButtonFormField<String>(
+          value: current,
+          decoration: InputDecoration(
+            labelText: label,
+            isDense: true,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          ),
+          items: opts
+              .map((o) => DropdownMenuItem(
+                  value: o,
+                  child: Text(o, style: const TextStyle(fontSize: 13))))
+              .toList(),
+          onChanged: (val) {
+            if (val == null) return;
+            onChanged(val == '— None —' ? '' : val);
+          },
+        ),
       ),
     );
   }
@@ -505,11 +561,14 @@ class _AddReportDialogState extends State<_AddReportDialog> {
           _referralLab = d['referralLab'] ?? '';
           if (!_labs.contains(_referralLab)) _referralLab = '';
         });
+        _sampleTypeSearchFocusNode.requestFocus();
       },
       fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
         return TextField(
           controller: controller,
           focusNode: focusNode,
+          autofocus: widget.doc == null && !widget.isReadOnly,
+          textInputAction: TextInputAction.next,
           decoration: InputDecoration(
             labelText: 'Search Patient',
             hintText: 'Name, ID, or Phone',
@@ -560,6 +619,8 @@ class _AddReportDialogState extends State<_AddReportDialog> {
 
   Widget _buildTestSearch() {
     return Autocomplete<DocumentSnapshot>(
+      focusNode: _testSearchFocusNode,
+      textEditingController: _testSearchCtrl,
       displayStringForOption: (doc) {
         final d = doc.data() as Map<String, dynamic>;
         final isProfile = d.containsKey('title');
@@ -599,6 +660,7 @@ class _AddReportDialogState extends State<_AddReportDialog> {
         return TextField(
           controller: controller,
           focusNode: focusNode,
+          textInputAction: TextInputAction.next,
           decoration: InputDecoration(
             labelText: 'Search Parameter or Profile',
             hintText: 'e.g. CBC or Glucose',
@@ -655,6 +717,7 @@ class _AddReportDialogState extends State<_AddReportDialog> {
         children: [
           if (onRemove != null && !widget.isReadOnly) ...[
             IconButton(
+              focusNode: FocusNode(skipTraversal: true),
               icon: const Icon(Icons.remove_circle_outline,
                   color: Colors.red, size: 20),
               onPressed: onRemove,
@@ -666,31 +729,50 @@ class _AddReportDialogState extends State<_AddReportDialog> {
           Expanded(
             flex: 2,
             child: widget.isReadOnly
-                ? Text(param.nameCtrl.text, style: const TextStyle(fontWeight: FontWeight.w500))
+                ? Text(param.nameCtrl.text,
+                    style: const TextStyle(fontWeight: FontWeight.w500))
                 : TextField(
                     controller: param.nameCtrl,
-                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
-                    decoration: const InputDecoration(isDense: true, border: InputBorder.none, hintText: 'Name'),
+                    focusNode: FocusNode(skipTraversal: true),
+                    style: const TextStyle(
+                        fontSize: 13, fontWeight: FontWeight.w500),
+                    textInputAction: TextInputAction.next,
+                    decoration: const InputDecoration(
+                        isDense: true,
+                        border: InputBorder.none,
+                        hintText: 'Name'),
                   ),
           ),
           Expanded(
             flex: 1,
             child: widget.isReadOnly
-                ? Text(param.unitCtrl.text, style: const TextStyle(color: Colors.grey))
+                ? Text(param.unitCtrl.text,
+                    style: const TextStyle(color: Colors.grey))
                 : TextField(
                     controller: param.unitCtrl,
+                    focusNode: FocusNode(skipTraversal: true),
                     style: const TextStyle(fontSize: 13, color: Colors.grey),
-                    decoration: const InputDecoration(isDense: true, border: InputBorder.none, hintText: 'Unit'),
+                    textInputAction: TextInputAction.next,
+                    decoration: const InputDecoration(
+                        isDense: true,
+                        border: InputBorder.none,
+                        hintText: 'Unit'),
                   ),
           ),
           Expanded(
             flex: 2,
             child: widget.isReadOnly
-                ? Text(param.refRangeCtrl.text, style: const TextStyle(color: Colors.grey))
+                ? Text(param.refRangeCtrl.text,
+                    style: const TextStyle(color: Colors.grey))
                 : TextField(
                     controller: param.refRangeCtrl,
+                    focusNode: FocusNode(skipTraversal: true),
                     style: const TextStyle(fontSize: 13, color: Colors.grey),
-                    decoration: const InputDecoration(isDense: true, border: InputBorder.none, hintText: 'Ref. Range'),
+                    textInputAction: TextInputAction.next,
+                    decoration: const InputDecoration(
+                        isDense: true,
+                        border: InputBorder.none,
+                        hintText: 'Ref. Range'),
                   ),
           ),
           Expanded(
@@ -703,6 +785,7 @@ class _AddReportDialogState extends State<_AddReportDialog> {
                   )
                 : TextField(
                     controller: param.valueCtrl,
+                    textInputAction: TextInputAction.next,
                     decoration: const InputDecoration(
                       isDense: true,
                       hintText: 'Result Value',
@@ -719,6 +802,8 @@ class _AddReportDialogState extends State<_AddReportDialog> {
 
   Widget _buildSampleTypeSearch() {
     return Autocomplete<DocumentSnapshot>(
+      focusNode: _sampleTypeSearchFocusNode,
+      textEditingController: _sampleTypeSearchCtrl,
       displayStringForOption: (doc) {
         final d = doc.data() as Map<String, dynamic>;
         return d['name'] ?? '';
@@ -734,11 +819,15 @@ class _AddReportDialogState extends State<_AddReportDialog> {
           return name.contains(q);
         });
       },
-      onSelected: (doc) => setState(() => _selectedSampleType = doc),
+      onSelected: (doc) {
+        setState(() => _selectedSampleType = doc);
+        _testSearchFocusNode.requestFocus();
+      },
       fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
         return TextField(
           controller: controller,
           focusNode: focusNode,
+          textInputAction: TextInputAction.next,
           decoration: InputDecoration(
             labelText: 'Search Sample Type',
             hintText: 'e.g. Blood, Serum',
@@ -751,6 +840,80 @@ class _AddReportDialogState extends State<_AddReportDialog> {
                     onPressed: () {
                       controller.clear();
                       setState(() => _selectedSampleType = null);
+                    },
+                  )
+                : null,
+          ),
+        );
+      },
+      optionsViewBuilder: (context, onSelected, options) {
+        return Align(
+          alignment: Alignment.topLeft,
+          child: Material(
+            elevation: 4,
+            borderRadius: BorderRadius.circular(8),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 250, maxWidth: 400),
+              child: ListView.builder(
+                padding: EdgeInsets.zero,
+                shrinkWrap: true,
+                itemCount: options.length,
+                itemBuilder: (context, index) {
+                  final doc = options.elementAt(index);
+                  final d = doc.data() as Map<String, dynamic>;
+                  return ListTile(
+                    title: Text(d['name'] ?? ''),
+                    onTap: () => onSelected(doc),
+                  );
+                },
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildDepartmentSearch() {
+    return Autocomplete<DocumentSnapshot>(
+      focusNode: _departmentSearchFocusNode,
+      textEditingController: _departmentSearchCtrl,
+      displayStringForOption: (doc) {
+        final d = doc.data() as Map<String, dynamic>;
+        return d['name'] ?? '';
+      },
+      optionsBuilder: (textEditingValue) {
+        if (textEditingValue.text.isEmpty) {
+          return const Iterable<DocumentSnapshot>.empty();
+        }
+        final q = textEditingValue.text.toLowerCase();
+        return _departments.where((doc) {
+          final d = doc.data() as Map<String, dynamic>;
+          final name = (d['name'] ?? '').toString().toLowerCase();
+          return name.contains(q);
+        });
+      },
+      onSelected: (doc) {
+        setState(() => _selectedDepartment = doc);
+        _testSearchFocusNode.requestFocus();
+      },
+      fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+        return TextField(
+          controller: controller,
+          focusNode: focusNode,
+          textInputAction: TextInputAction.next,
+          decoration: InputDecoration(
+            labelText: 'Search Department',
+            hintText: 'e.g. Pathology, Biochemistry',
+            prefixIcon: const Icon(Icons.business_outlined),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+            isDense: true,
+            suffixIcon: _selectedDepartment != null
+                ? IconButton(
+                    icon: const Icon(Icons.clear, size: 18),
+                    onPressed: () {
+                      controller.clear();
+                      setState(() => _selectedDepartment = null);
                     },
                   )
                 : null,
@@ -996,309 +1159,403 @@ class _AddReportDialogState extends State<_AddReportDialog> {
               const Expanded(child: Center(child: CircularProgressIndicator()))
             else
               Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // 1. Patient Selection
-                      const Text('Patient Details',
-                          style: TextStyle(
-                              fontSize: 14, fontWeight: FontWeight.w600)),
-                      const SizedBox(height: 12),
-                      if (widget.isReadOnly || _selectedPatient != null)
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: cs.surfaceContainerLow,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: cs.outlineVariant),
-                          ),
-                          child: Builder(builder: (context) {
-                            final pData = _selectedPatient != null
-                                ? _selectedPatient!.data()
-                                    as Map<String, dynamic>
-                                : <String, dynamic>{};
-                            final name = pData['fullName'] ??
-                                _patientSearchCtrl.text.split(' (').first;
-                            final patientId = pData['patient_id'] ??
-                                _patientSearchCtrl.text
-                                    .split(' (')
-                                    .last
-                                    .replaceAll(')', '');
-                            final age = pData['age']?.toString() ?? '';
-                            final gender = pData['gender'] ?? '';
-                            final mobile = pData['mobile'] ?? '';
-                            final address = pData['address'] ?? '';
-                            final pincode = pData['pincode'] ?? '';
-
-                            return Column(
-                              children: [
-                                Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    CircleAvatar(
-                                      backgroundColor: cs.primaryContainer,
-                                      child: Icon(Icons.person,
-                                          color: cs.onPrimaryContainer),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            name,
-                                            style: const TextStyle(
-                                                fontWeight: FontWeight.w600,
-                                                fontSize: 16),
-                                          ),
-                                          const SizedBox(height: 2),
-                                          Text(
-                                            'ID: $patientId',
-                                            style: TextStyle(
-                                                color: cs.onSurface
-                                                    .withValues(alpha: 0.6),
-                                                fontSize: 13),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    BarcodeWidget(
-                                      barcode: Barcode.code128(),
-                                      data: patientId.toString(),
-                                      width: 100,
-                                      height: 35,
-                                      drawText: false,
-                                    ),
-                                    if (!widget.isReadOnly) ...[
-                                      const SizedBox(width: 8),
-                                      IconButton(
-                                        icon: const Icon(Icons.close,
-                                            color: Colors.red),
-                                        onPressed: () {
-                                          setState(() {
-                                            _selectedPatient = null;
-                                            _patientSearchCtrl.clear();
-                                          });
-                                        },
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                                if (_selectedPatient != null) ...[
-                                  const SizedBox(height: 10),
-                                  Divider(
-                                      height: 1,
-                                      color: cs.outlineVariant
-                                          .withValues(alpha: 0.5)),
-                                  const SizedBox(height: 10),
-                                  Row(
-                                    children: [
-                                      _patientInfoChip(Icons.cake_outlined,
-                                          'Age/Gender', '$age / $gender', cs),
-                                      const SizedBox(width: 16),
-                                      _patientInfoChip(
-                                          Icons.phone_outlined,
-                                          'Contact',
-                                          mobile.isEmpty ? 'N/A' : mobile,
-                                          cs),
-                                      const SizedBox(width: 16),
-                                      _patientInfoChip(
-                                          Icons.location_on_outlined,
-                                          'Address',
-                                          address.isEmpty ? 'N/A' : address,
-                                          cs),
-                                      const SizedBox(width: 16),
-                                      _patientInfoChip(
-                                          Icons.pin_drop_outlined,
-                                          'Pincode',
-                                          pincode.isEmpty ? 'N/A' : pincode,
-                                          cs),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 10),
-                                  Builder(builder: (context) {
-                                    if (!widget.isReadOnly) {
-                                      return Row(
-                                        children: [
-                                          _drop(
-                                              'Ref. Doctor',
-                                              _referralDr,
-                                              _doctors,
-                                              (v) => setState(
-                                                  () => _referralDr = v)),
-                                          const SizedBox(width: 8),
-                                          _drop(
-                                              'Ref. Hospital',
-                                              _referralHospital,
-                                              _hospitals,
-                                              (v) => setState(
-                                                  () => _referralHospital = v)),
-                                          const SizedBox(width: 8),
-                                          _drop(
-                                              'Ref. Lab',
-                                              _referralLab,
-                                              _labs,
-                                              (v) => setState(
-                                                  () => _referralLab = v)),
-                                        ],
-                                      );
-                                    }
-
-                                    bool isValid(String s) =>
-                                        s.isNotEmpty && s != '— None —';
-                                    String referValue = 'Self';
-                                    IconData referIcon = Icons.person_outline;
-                                    String referLabel = 'Referred By';
-
-                                    if (isValid(_referralDr)) {
-                                      referValue = _referralDr;
-                                      referIcon =
-                                          Icons.medical_services_outlined;
-                                      referLabel = 'Ref. Doctor';
-                                    } else if (isValid(_referralHospital)) {
-                                      referValue = _referralHospital;
-                                      referIcon = Icons.local_hospital_outlined;
-                                      referLabel = 'Ref. Hospital';
-                                    } else if (isValid(_referralLab)) {
-                                      referValue = _referralLab;
-                                      referIcon = Icons.science_outlined;
-                                      referLabel = 'Ref. Lab';
-                                    }
-
-                                    return Row(
-                                      children: [
-                                        _patientInfoChip(referIcon, referLabel,
-                                            referValue, cs),
-                                        const SizedBox(width: 16),
-                                        const Expanded(
-                                            flex: 3, child: SizedBox.shrink()),
-                                      ],
-                                    );
-                                  }),
-                                ],
-                              ],
-                            );
-                          }),
-                        )
-                      else
-                        _buildPatientSearch(),
-                      const SizedBox(height: 24),
-
-                      // 2. Sample Type & SID
-                      const Text('Sample Type & SID',
-                          style: TextStyle(
-                              fontSize: 14, fontWeight: FontWeight.w600)),
-                      const SizedBox(height: 12),
-                      if (widget.isReadOnly || _selectedSampleType != null)
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: cs.surfaceContainerLow,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: cs.outlineVariant),
-                          ),
-                          child: Row(
-                            children: [
-                              CircleAvatar(
-                                backgroundColor: cs.secondaryContainer,
-                                child: Icon(Icons.science,
-                                    color: cs.onSecondaryContainer),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      _selectedSampleType != null
-                                          ? (_selectedSampleType!.data() as Map<
-                                                  String, dynamic>)['name'] ??
-                                              ''
-                                          : (widget.doc!.data() as Map<String,
-                                                  dynamic>)['sampleType'] ??
-                                              '',
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.w600,
-                                          fontSize: 16),
-                                    ),
-                                    if (widget.doc != null)
-                                      Text(
-                                        'SID: ${(widget.doc!.data() as Map<String, dynamic>)['sid'] ?? ''}',
-                                        style: TextStyle(
-                                            color: cs.onSurface
-                                                .withValues(alpha: 0.6),
-                                            fontSize: 13),
-                                      ),
-                                  ],
-                                ),
-                              ),
-                              if (widget.doc != null) ...[
-                                const SizedBox(width: 12),
-                                BarcodeWidget(
-                                  barcode: Barcode.code128(),
-                                  data: (widget.doc!.data()
-                                              as Map<String, dynamic>)['sid']
-                                          ?.toString() ??
-                                      '',
-                                  width: 100,
-                                  height: 35,
-                                  drawText: false,
-                                ),
-                              ],
-                              if (!widget.isReadOnly) ...[
-                                const SizedBox(width: 8),
-                                IconButton(
-                                  icon: const Icon(Icons.close,
-                                      color: Colors.red),
-                                  onPressed: () {
-                                    setState(() {
-                                      _selectedSampleType = null;
-                                    });
-                                  },
-                                ),
-                              ],
-                            ],
-                          ),
-                        )
-                      else
-                        _buildSampleTypeSearch(),
-                      const SizedBox(height: 24),
-
-                      if (!widget.isReadOnly) ...[
-                        // 3.  Add Tests
-                        const Text('Tests',
+                child: FocusTraversalGroup(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // 1. Patient Selection
+                        const Text('Patient Details',
                             style: TextStyle(
                                 fontSize: 14, fontWeight: FontWeight.w600)),
                         const SizedBox(height: 12),
-                        _buildTestSearch(),
-                        const SizedBox(height: 24),
-                      ],
+                        if (widget.isReadOnly || _selectedPatient != null)
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: cs.surfaceContainerLow,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: cs.outlineVariant),
+                            ),
+                            child: Builder(builder: (context) {
+                              final pData = _selectedPatient != null
+                                  ? _selectedPatient!.data()
+                                      as Map<String, dynamic>
+                                  : <String, dynamic>{};
+                              final name = pData['fullName'] ??
+                                  _patientSearchCtrl.text.split(' (').first;
+                              final patientId = pData['patient_id'] ??
+                                  _patientSearchCtrl.text
+                                      .split(' (')
+                                      .last
+                                      .replaceAll(')', '');
+                              final age = pData['age']?.toString() ?? '';
+                              final gender = pData['gender'] ?? '';
+                              final mobile = pData['mobile'] ?? '';
+                              final address = pData['address'] ?? '';
+                              final pincode = pData['pincode'] ?? '';
 
-                      // 4. Selected Tests List
-                      if (_entries.isNotEmpty) ...[
-                        const Text('Tests',
-                            style: TextStyle(
-                                fontSize: 14, fontWeight: FontWeight.w600)),
-                        const SizedBox(height: 12),
-                        Container(
-                          decoration: BoxDecoration(
-                            border: Border.all(
-                                color:
-                                    cs.outlineVariant.withValues(alpha: 0.5)),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Column(
-                            children: _entries.asMap().entries.map((entryPair) {
-                              final index = entryPair.key;
-                              final entry = entryPair.value;
                               return Column(
                                 children: [
-                                  if (index > 0)
-                                    const Divider(height: 1, thickness: 1),
-                                  // Profile / Parameter Header
+                                  Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      CircleAvatar(
+                                        backgroundColor: cs.primaryContainer,
+                                        child: Icon(Icons.person,
+                                            color: cs.onPrimaryContainer),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              name,
+                                              style: const TextStyle(
+                                                  fontWeight: FontWeight.w600,
+                                                  fontSize: 16),
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              'ID: $patientId',
+                                              style: TextStyle(
+                                                  color: cs.onSurface
+                                                      .withValues(alpha: 0.6),
+                                                  fontSize: 13),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      BarcodeWidget(
+                                        barcode: Barcode.code128(),
+                                        data: patientId.toString(),
+                                        width: 100,
+                                        height: 35,
+                                        drawText: false,
+                                      ),
+                                      if (!widget.isReadOnly) ...[
+                                        const SizedBox(width: 8),
+                                        IconButton(
+                                          icon: const Icon(Icons.close,
+                                              color: Colors.red),
+                                          onPressed: () {
+                                            setState(() {
+                                              _selectedPatient = null;
+                                              _patientSearchCtrl.clear();
+                                            });
+                                          },
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                  if (_selectedPatient != null) ...[
+                                    const SizedBox(height: 10),
+                                    Divider(
+                                        height: 1,
+                                        color: cs.outlineVariant
+                                            .withValues(alpha: 0.5)),
+                                    const SizedBox(height: 10),
+                                    Row(
+                                      children: [
+                                        _patientInfoChip(Icons.cake_outlined,
+                                            'Age/Gender', '$age / $gender', cs),
+                                        const SizedBox(width: 16),
+                                        _patientInfoChip(
+                                            Icons.phone_outlined,
+                                            'Contact',
+                                            mobile.isEmpty ? 'N/A' : mobile,
+                                            cs),
+                                        const SizedBox(width: 16),
+                                        _patientInfoChip(
+                                            Icons.location_on_outlined,
+                                            'Address',
+                                            address.isEmpty ? 'N/A' : address,
+                                            cs),
+                                        const SizedBox(width: 16),
+                                        _patientInfoChip(
+                                            Icons.pin_drop_outlined,
+                                            'Pincode',
+                                            pincode.isEmpty ? 'N/A' : pincode,
+                                            cs),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 10),
+                                    Builder(builder: (context) {
+                                      if (!widget.isReadOnly) {
+                                        return Row(
+                                          children: [
+                                            _drop(
+                                                'Ref. Doctor',
+                                                _referralDr,
+                                                _doctors,
+                                                (v) => setState(
+                                                    () => _referralDr = v)),
+                                            const SizedBox(width: 8),
+                                            _drop(
+                                                'Ref. Hospital',
+                                                _referralHospital,
+                                                _hospitals,
+                                                (v) => setState(() =>
+                                                    _referralHospital = v)),
+                                            const SizedBox(width: 8),
+                                            _drop(
+                                                'Ref. Lab',
+                                                _referralLab,
+                                                _labs,
+                                                (v) => setState(
+                                                    () => _referralLab = v)),
+                                          ],
+                                        );
+                                      }
+
+                                      bool isValid(String s) =>
+                                          s.isNotEmpty && s != '— None —';
+                                      String referValue = 'Self';
+                                      IconData referIcon = Icons.person_outline;
+                                      String referLabel = 'Referred By';
+
+                                      if (isValid(_referralDr)) {
+                                        referValue = _referralDr;
+                                        referIcon =
+                                            Icons.medical_services_outlined;
+                                        referLabel = 'Ref. Doctor';
+                                      } else if (isValid(_referralHospital)) {
+                                        referValue = _referralHospital;
+                                        referIcon =
+                                            Icons.local_hospital_outlined;
+                                        referLabel = 'Ref. Hospital';
+                                      } else if (isValid(_referralLab)) {
+                                        referValue = _referralLab;
+                                        referIcon = Icons.science_outlined;
+                                        referLabel = 'Ref. Lab';
+                                      }
+
+                                      return Row(
+                                        children: [
+                                          _patientInfoChip(referIcon,
+                                              referLabel, referValue, cs),
+                                          const SizedBox(width: 16),
+                                          const Expanded(
+                                              flex: 2,
+                                              child: SizedBox.shrink()),
+                                        ],
+                                      );
+                                    }),
+                                  ],
+                                ],
+                              );
+                            }),
+                          )
+                        else
+                          _buildPatientSearch(),
+                        const SizedBox(height: 24),
+
+                        // 2. Sample Type & SID
+                        const Text('Sample Type & SID',
+                            style: TextStyle(
+                                fontSize: 14, fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 12),
+                        if (widget.isReadOnly || _selectedSampleType != null)
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: cs.surfaceContainerLow,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: cs.outlineVariant),
+                            ),
+                            child: Row(
+                              children: [
+                                CircleAvatar(
+                                  backgroundColor: cs.secondaryContainer,
+                                  child: Icon(Icons.science,
+                                      color: cs.onSecondaryContainer),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        _selectedSampleType != null
+                                            ? (_selectedSampleType!.data()
+                                                    as Map<String,
+                                                        dynamic>)['name'] ??
+                                                ''
+                                            : (widget.doc!.data() as Map<String,
+                                                    dynamic>)['sampleType'] ??
+                                                '',
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 16),
+                                      ),
+                                      if (widget.doc != null)
+                                        Text(
+                                          'SID: ${(widget.doc!.data() as Map<String, dynamic>)['sid'] ?? ''}',
+                                          style: TextStyle(
+                                              color: cs.onSurface
+                                                  .withValues(alpha: 0.6),
+                                              fontSize: 13),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                                if (widget.doc != null) ...[
+                                  const SizedBox(width: 12),
+                                  BarcodeWidget(
+                                    barcode: Barcode.code128(),
+                                    data: (widget.doc!.data()
+                                                as Map<String, dynamic>)['sid']
+                                            ?.toString() ??
+                                        '',
+                                    width: 100,
+                                    height: 35,
+                                    drawText: false,
+                                  ),
+                                ],
+                                if (!widget.isReadOnly) ...[
+                                  const SizedBox(width: 8),
+                                  IconButton(
+                                    icon: const Icon(Icons.close,
+                                        color: Colors.red),
+                                    onPressed: () {
+                                      setState(() {
+                                        _selectedSampleType = null;
+                                      });
+                                    },
+                                  ),
+                                ],
+                              ],
+                            ),
+                          )
+                        else
+                          _buildSampleTypeSearch(),
+                        const SizedBox(height: 24),
+
+                        // 3. Department
+                        const Text('Department',
+                            style: TextStyle(
+                                fontSize: 14, fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 12),
+                        if (widget.isReadOnly || _selectedDepartment != null)
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: cs.surfaceContainerLow,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: cs.outlineVariant),
+                            ),
+                            child: Row(
+                              children: [
+                                CircleAvatar(
+                                  backgroundColor: cs.tertiaryContainer,
+                                  child: Icon(Icons.business,
+                                      color: cs.onTertiaryContainer),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    _selectedDepartment != null
+                                        ? (_selectedDepartment!.data() as Map<
+                                                String, dynamic>)['name'] ??
+                                            ''
+                                        : (widget.doc!.data() as Map<String,
+                                                dynamic>)['department'] ??
+                                            '',
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 16),
+                                  ),
+                                ),
+                                if (!widget.isReadOnly) ...[
+                                  const SizedBox(width: 8),
+                                  IconButton(
+                                    icon: const Icon(Icons.close,
+                                        color: Colors.red),
+                                    onPressed: () {
+                                      setState(() {
+                                        _selectedDepartment = null;
+                                      });
+                                    },
+                                  ),
+                                ],
+                              ],
+                            ),
+                          )
+                        else
+                          _buildDepartmentSearch(),
+                        const SizedBox(height: 24),
+
+                        if (!widget.isReadOnly) ...[
+                          // 4.  Add Tests
+                          const Text('Tests',
+                              style: TextStyle(
+                                  fontSize: 14, fontWeight: FontWeight.w600)),
+                          const SizedBox(height: 12),
+                          _buildTestSearch(),
+                          const SizedBox(height: 24),
+                        ],
+
+                        // 4. Selected Tests List
+                        if (_entries.isNotEmpty) ...[
+                          Row(
+                            children: [
+                              const Text('Selected Tests',
+                                  style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600)),
+                              const Spacer(),
+                              TextButton.icon(
+                                focusNode: FocusNode(skipTraversal: true),
+                                onPressed: () {
+                                  setState(() {
+                                    for (var e in _entries) {
+                                      e.isExpanded = true;
+                                    }
+                                  });
+                                },
+                                icon: const Icon(Icons.expand, size: 16),
+                                label: const Text('Expand All',
+                                    style: TextStyle(fontSize: 12)),
+                              ),
+                              const SizedBox(width: 8),
+                              TextButton.icon(
+                                focusNode: FocusNode(skipTraversal: true),
+                                onPressed: () {
+                                  setState(() {
+                                    for (var e in _entries) {
+                                      e.isExpanded = false;
+                                    }
+                                  });
+                                },
+                                icon: const Icon(Icons.compress, size: 16),
+                                label: const Text('Collapse All',
+                                    style: TextStyle(fontSize: 12)),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Container(
+                            decoration: BoxDecoration(
+                              border: Border.all(
+                                  color:
+                                      cs.outlineVariant.withValues(alpha: 0.5)),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Column(
+                              children:
+                                  _entries.asMap().entries.map((entryPair) {
+                                final index = entryPair.key;
+                                final entry = entryPair.value;
+                                return Column(
+                                  children: [
+                                    if (index > 0)
+                                      const Divider(height: 1, thickness: 1),
+                                    // Profile / Parameter Header
                                     Container(
                                       padding: const EdgeInsets.symmetric(
                                           horizontal: 12, vertical: 8),
@@ -1308,6 +1565,8 @@ class _AddReportDialogState extends State<_AddReportDialog> {
                                         children: [
                                           if (!widget.isReadOnly)
                                             IconButton(
+                                              focusNode: FocusNode(
+                                                  skipTraversal: true),
                                               icon: const Icon(
                                                   Icons.remove_circle_outline,
                                                   color: Colors.red,
@@ -1330,15 +1589,22 @@ class _AddReportDialogState extends State<_AddReportDialog> {
                                             child: widget.isReadOnly
                                                 ? Text(entry.titleCtrl.text,
                                                     style: TextStyle(
-                                                        fontWeight: FontWeight.bold,
+                                                        fontWeight:
+                                                            FontWeight.bold,
                                                         color: cs.primary))
                                                 : TextField(
                                                     controller: entry.titleCtrl,
+                                                    focusNode: FocusNode(
+                                                        skipTraversal: true),
                                                     style: TextStyle(
-                                                        fontWeight: FontWeight.bold,
+                                                        fontWeight:
+                                                            FontWeight.bold,
                                                         color: cs.primary,
                                                         fontSize: 14),
-                                                    decoration: const InputDecoration(
+                                                    textInputAction:
+                                                        TextInputAction.next,
+                                                    decoration:
+                                                        const InputDecoration(
                                                       isDense: true,
                                                       border: InputBorder.none,
                                                       hintText: 'Profile Title',
@@ -1347,28 +1613,43 @@ class _AddReportDialogState extends State<_AddReportDialog> {
                                           ),
                                           const SizedBox(width: 8),
                                           const Text('Subtotal: ₹ ',
-                                              style: TextStyle(fontWeight: FontWeight.w600)),
+                                              style: TextStyle(
+                                                  fontWeight: FontWeight.w600)),
                                           widget.isReadOnly
                                               ? Text('${entry.price}',
                                                   style: TextStyle(
                                                       color: cs.primary,
-                                                      fontWeight: FontWeight.w600))
+                                                      fontWeight:
+                                                          FontWeight.w600))
                                               : SizedBox(
                                                   width: 60,
                                                   child: TextField(
                                                     controller: entry.priceCtrl,
-                                                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                                    style: TextStyle(color: cs.primary, fontWeight: FontWeight.w600, fontSize: 13),
-                                                    decoration: const InputDecoration(
+                                                    keyboardType:
+                                                        const TextInputType
+                                                            .numberWithOptions(
+                                                            decimal: true),
+                                                    style: TextStyle(
+                                                        color: cs.primary,
+                                                        fontWeight:
+                                                            FontWeight.w600,
+                                                        fontSize: 13),
+                                                    textInputAction:
+                                                        TextInputAction.next,
+                                                    decoration:
+                                                        const InputDecoration(
                                                       isDense: true,
                                                       border: InputBorder.none,
                                                       hintText: '0.00',
                                                     ),
-                                                    onChanged: (_) => _updateTotal(),
+                                                    onChanged: (_) =>
+                                                        _updateTotal(),
                                                   ),
                                                 ),
                                           const SizedBox(width: 8),
                                           IconButton(
+                                            focusNode:
+                                                FocusNode(skipTraversal: true),
                                             icon: Icon(
                                                 entry.isExpanded
                                                     ? Icons.expand_less
@@ -1408,159 +1689,219 @@ class _AddReportDialogState extends State<_AddReportDialog> {
                                           }).toList(),
                                         ),
                                       ),
-                                  // No else block needed; individual parameters reuse profile UI.
-                                ],
-                              );
-                            }).toList(),
+                                    // No else block needed; individual parameters reuse profile UI.
+                                  ],
+                                );
+                              }).toList(),
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 24),
-                        // Status & Payment Switches (edit mode only)
-                        if (!widget.isReadOnly) ...[
+                          const SizedBox(height: 24),
+                          // Status & Payment Switches (edit mode only)
+                          if (!widget.isReadOnly) ...[
+                            Row(
+                              children: [
+                                // Report Status Switch
+                                Icon(Icons.assignment_outlined,
+                                    size: 16,
+                                    color: cs.onSurface.withValues(alpha: 0.6)),
+                                const SizedBox(width: 6),
+                                Text('Report:',
+                                    style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w500,
+                                        color: cs.onSurface
+                                            .withValues(alpha: 0.7))),
+                                const SizedBox(width: 4),
+                                Transform.scale(
+                                  scale: 0.75,
+                                  child: Switch(
+                                    focusNode: _reportSwitchFocusNode,
+                                    value: _status == 'Completed',
+                                    activeThumbColor: Colors.green,
+                                    materialTapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
+                                    onChanged: (val) {
+                                      setState(() {
+                                        _status = val ? 'Completed' : 'Pending';
+                                      });
+                                    },
+                                  ),
+                                ),
+                                Text(
+                                  'Completed',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: _status == 'Completed'
+                                        ? FontWeight.w600
+                                        : FontWeight.w400,
+                                    color: _status == 'Completed'
+                                        ? Colors.green.shade700
+                                        : cs.onSurface.withValues(alpha: 0.5),
+                                  ),
+                                ),
+                                const Spacer(),
+                                // Payment Status Switch
+                                Icon(Icons.payment,
+                                    size: 16,
+                                    color: cs.onSurface.withValues(alpha: 0.6)),
+                                const SizedBox(width: 6),
+                                Text('Payment:',
+                                    style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w500,
+                                        color: cs.onSurface
+                                            .withValues(alpha: 0.7))),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Pending',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: _paymentStatus == 'Pending'
+                                        ? FontWeight.w600
+                                        : FontWeight.w400,
+                                    color: _paymentStatus == 'Pending'
+                                        ? Colors.red.shade700
+                                        : cs.onSurface.withValues(alpha: 0.5),
+                                  ),
+                                ),
+                                Transform.scale(
+                                  scale: 0.75,
+                                  child: Switch(
+                                    focusNode: _paymentSwitchFocusNode,
+                                    value: _paymentStatus == 'Paid',
+                                    activeThumbColor: Colors.green,
+                                    materialTapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
+                                    onChanged: (val) {
+                                      setState(() {
+                                        _paymentStatus =
+                                            val ? 'Paid' : 'Pending';
+                                      });
+                                    },
+                                  ),
+                                ),
+                                Text(
+                                  'Paid',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: _paymentStatus == 'Paid'
+                                        ? FontWeight.w600
+                                        : FontWeight.w400,
+                                    color: _paymentStatus == 'Paid'
+                                        ? Colors.green.shade700
+                                        : cs.onSurface.withValues(alpha: 0.5),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+                          // Discount
                           Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
                             children: [
-                              // Report Status Switch
-                              Icon(Icons.assignment_outlined,
-                                  size: 16,
-                                  color: cs.onSurface.withValues(alpha: 0.6)),
-                              const SizedBox(width: 6),
-                              Text('Report:',
+                              const Text('Discount: ',
                                   style: TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w500,
-                                      color:
-                                          cs.onSurface.withValues(alpha: 0.7))),
-                              const SizedBox(width: 4),
-                              Text(
-                                'Pending',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: _status == 'Pending'
-                                      ? FontWeight.w600
-                                      : FontWeight.w400,
-                                  color: _status == 'Pending'
-                                      ? Colors.orange.shade700
-                                      : cs.onSurface.withValues(alpha: 0.5),
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500)),
+                              const SizedBox(width: 8),
+                              ExcludeFocus(
+                                child: ToggleButtons(
+                                  isSelected: [
+                                    _discountMode == 'Amount',
+                                    _discountMode == 'Percentage'
+                                  ],
+                                  onPressed: widget.isReadOnly
+                                      ? null
+                                      : (index) {
+                                          setState(() {
+                                            _discountMode = index == 0
+                                                ? 'Amount'
+                                                : 'Percentage';
+                                            _updateTotal();
+                                          });
+                                        },
+                                  borderRadius: BorderRadius.circular(6),
+                                  constraints: const BoxConstraints(
+                                      minHeight: 28, minWidth: 40),
+                                  children: const [
+                                    Text('₹',
+                                        style: TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.bold)),
+                                    Text('%',
+                                        style: TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.bold)),
+                                  ],
                                 ),
                               ),
-                              Transform.scale(
-                                scale: 0.75,
-                                child: Switch(
-                                  value: _status == 'Completed',
-                                  activeThumbColor: Colors.green,
-                                  materialTapTargetSize:
-                                      MaterialTapTargetSize.shrinkWrap,
-                                  onChanged: (val) {
-                                    setState(() {
-                                      _status = val ? 'Completed' : 'Pending';
-                                    });
-                                  },
-                                ),
-                              ),
-                              Text(
-                                'Completed',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: _status == 'Completed'
-                                      ? FontWeight.w600
-                                      : FontWeight.w400,
-                                  color: _status == 'Completed'
-                                      ? Colors.green.shade700
-                                      : cs.onSurface.withValues(alpha: 0.5),
-                                ),
-                              ),
-                              const Spacer(),
-                              // Payment Status Switch
-                              Icon(Icons.payment,
-                                  size: 16,
-                                  color: cs.onSurface.withValues(alpha: 0.6)),
-                              const SizedBox(width: 6),
-                              Text('Payment:',
-                                  style: TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w500,
-                                      color:
-                                          cs.onSurface.withValues(alpha: 0.7))),
-                              const SizedBox(width: 4),
-                              Text(
-                                'Pending',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: _paymentStatus == 'Pending'
-                                      ? FontWeight.w600
-                                      : FontWeight.w400,
-                                  color: _paymentStatus == 'Pending'
-                                      ? Colors.red.shade700
-                                      : cs.onSurface.withValues(alpha: 0.5),
-                                ),
-                              ),
-                              Transform.scale(
-                                scale: 0.75,
-                                child: Switch(
-                                  value: _paymentStatus == 'Paid',
-                                  activeThumbColor: Colors.green,
-                                  materialTapTargetSize:
-                                      MaterialTapTargetSize.shrinkWrap,
-                                  onChanged: (val) {
-                                    setState(() {
-                                      _paymentStatus = val ? 'Paid' : 'Pending';
-                                    });
-                                  },
-                                ),
-                              ),
-                              Text(
-                                'Paid',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: _paymentStatus == 'Paid'
-                                      ? FontWeight.w600
-                                      : FontWeight.w400,
-                                  color: _paymentStatus == 'Paid'
-                                      ? Colors.green.shade700
-                                      : cs.onSurface.withValues(alpha: 0.5),
-                                ),
+                              const SizedBox(width: 12),
+                              SizedBox(
+                                width: 100,
+                                child: widget.isReadOnly
+                                    ? Text(
+                                        '${_discountCtrl.text} ${_discountMode == 'Amount' ? '₹' : '%'}',
+                                        style: const TextStyle(fontSize: 14),
+                                      )
+                                    : TextField(
+                                        controller: _discountCtrl,
+                                        focusNode: _discountFocusNode,
+                                        keyboardType: const TextInputType
+                                            .numberWithOptions(decimal: true),
+                                        textInputAction: TextInputAction.next,
+                                        onChanged: (_) => _updateTotal(),
+                                        decoration: const InputDecoration(
+                                          border: OutlineInputBorder(),
+                                          isDense: true,
+                                          contentPadding: EdgeInsets.symmetric(
+                                              horizontal: 8, vertical: 8),
+                                        ),
+                                      ),
                               ),
                             ],
                           ),
                           const SizedBox(height: 16),
-                        ],
-                        // Grand Total
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            const Text('Grand Total ₹: ',
-                                style: TextStyle(
-                                    fontSize: 16, fontWeight: FontWeight.w600)),
-                            SizedBox(
-                              width: 120,
-                              child: widget.isReadOnly
-                                  ? Text(
-                                      _grandTotalCtrl.text.isEmpty
-                                          ? '0.00'
-                                          : _grandTotalCtrl.text,
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 16),
-                                      textAlign: TextAlign.right,
-                                    )
-                                  : TextField(
-                                      controller: _grandTotalCtrl,
-                                      keyboardType:
-                                          const TextInputType.numberWithOptions(
-                                              decimal: true),
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 16),
-                                      decoration: const InputDecoration(
-                                        border: OutlineInputBorder(),
-                                        isDense: true,
+                          // Grand Total
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              const Text('Grand Total ₹: ',
+                                  style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600)),
+                              SizedBox(
+                                width: 120,
+                                child: widget.isReadOnly
+                                    ? Text(
+                                        _grandTotalCtrl.text.isEmpty
+                                            ? '0.00'
+                                            : _grandTotalCtrl.text,
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 16),
+                                        textAlign: TextAlign.right,
+                                      )
+                                    : TextField(
+                                        controller: _grandTotalCtrl,
+                                        keyboardType: const TextInputType
+                                            .numberWithOptions(decimal: true),
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 16),
+                                        textInputAction: TextInputAction.done,
+                                        onSubmitted: (_) => _saveReport(),
+                                        decoration: const InputDecoration(
+                                          border: OutlineInputBorder(),
+                                          isDense: true,
+                                        ),
                                       ),
-                                    ),
-                            ),
-                          ],
-                        ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
                 ),
               ),

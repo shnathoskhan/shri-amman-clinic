@@ -1,5 +1,6 @@
 // lib/screens/admin/patient_screen.dart
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shri_amman_clinic/widgets/base_layout.dart';
 import 'package:barcode_widget/barcode_widget.dart';
@@ -134,6 +135,45 @@ class _PatientDialogState extends State<_PatientDialog> {
     _referralDr = rawDr == 'SELF' ? '' : rawDr;
     _referralHospital = _d?['referralHospital'] ?? '';
     _loadReferralLists();
+
+    for (final c in [
+      _name, _dob, _age, _mobile, _altMobile, _email, _address, _city,
+      _pincode, _passport, _aadhaar, _height, _weight, _bp
+    ]) {
+      c.addListener(_onFieldChanged);
+    }
+  }
+
+  void _onFieldChanged() {
+    if (mounted) setState(() {});
+  }
+
+  bool _isDirty() {
+    if (widget.doc == null) return true; // Always active for new patient
+    final rawDr = _d?['referralDr'] ?? '';
+    final origDr = rawDr == 'SELF' ? '' : rawDr;
+    
+    return _title != (_d?['title'] ?? 'Mr') ||
+        _name.text.trim() != _v('fullName') ||
+        _gender != (_d?['gender'] ?? 'Male') ||
+        _dob.text.trim() != _v('dob') ||
+        _age.text.trim() != _v('age') ||
+        _ageUnit != (_d?['ageUnit'] ?? 'Y') ||
+        _mobile.text.trim() != _v('mobile') ||
+        _altMobile.text.trim() != _v('altMobile') ||
+        _email.text.trim() != _v('email') ||
+        _address.text.trim() != _v('address') ||
+        _city.text.trim() != (_v('city').isNotEmpty ? _v('city') : 'Salem') ||
+        _pincode.text.trim() != _v('pincode') ||
+        _nationality != (_d?['nationality'] ?? 'INDIA') ||
+        _passport.text.trim() != _v('passport') ||
+        _aadhaar.text.trim() != _v('aadhaar') ||
+        _referralLab != (_d?['referralLab'] ?? '') ||
+        _referralDr != origDr ||
+        _referralHospital != (_d?['referralHospital'] ?? '') ||
+        _height.text.trim() != _v('height') ||
+        _weight.text.trim() != _v('weight') ||
+        _bp.text.trim() != _v('bp');
   }
 
   @override
@@ -155,6 +195,7 @@ class _PatientDialogState extends State<_PatientDialog> {
       _weight,
       _bp,
     ]) {
+      c.removeListener(_onFieldChanged);
       c.dispose();
     }
     super.dispose();
@@ -334,30 +375,54 @@ class _PatientDialogState extends State<_PatientDialog> {
     String? hint,
     String? prefix,
     int maxLines = 1,
-  }) =>
-      TextFormField(
-        controller: ctrl,
-        readOnly: widget.isReadOnly,
-        keyboardType: kb,
-        maxLines: maxLines,
-        style: const TextStyle(fontSize: 14),
-        decoration: _dec(label, hint: hint, prefix: prefix),
+    TextInputAction? action,
+    void Function(String)? onSubmitted,
+  }) {
+    final field = TextFormField(
+      controller: ctrl,
+      readOnly: widget.isReadOnly,
+      keyboardType: kb,
+      maxLines: maxLines,
+      textInputAction: action ??
+          (maxLines > 1 ? TextInputAction.newline : TextInputAction.next),
+      onFieldSubmitted: onSubmitted,
+      style: const TextStyle(fontSize: 14),
+      decoration: _dec(label, hint: hint, prefix: prefix),
+    );
+
+    if (maxLines > 1) {
+      return Shortcuts(
+        shortcuts: const <ShortcutActivator, Intent>{
+          SingleActivator(LogicalKeyboardKey.enter): NextFocusIntent(),
+          SingleActivator(LogicalKeyboardKey.numpadEnter): NextFocusIntent(),
+        },
+        child: field,
       );
+    }
+    return field;
+  }
 
   Widget _drop<T>(String label, String val, List<String> opts,
       void Function(String) onChanged,
-      {bool allowEmpty = false}) {
+      {bool allowEmpty = false, bool autofocus = false}) {
     final items = [
       if (allowEmpty)
         const DropdownMenuItem<String>(value: '', child: Text('— None —')),
       ...opts.map((e) => DropdownMenuItem<String>(value: e, child: Text(e))),
     ];
-    return DropdownButtonFormField<String>(
-      value: val.isEmpty && !allowEmpty ? opts.first : val,
-      decoration: _dec(label),
-      style: const TextStyle(fontSize: 14),
-      items: items,
-      onChanged: widget.isReadOnly ? null : (v) => onChanged(v ?? val),
+    return Shortcuts(
+      shortcuts: const <ShortcutActivator, Intent>{
+        SingleActivator(LogicalKeyboardKey.enter): NextFocusIntent(),
+        SingleActivator(LogicalKeyboardKey.numpadEnter): NextFocusIntent(),
+      },
+      child: DropdownButtonFormField<String>(
+        autofocus: autofocus,
+        value: val.isEmpty && !allowEmpty ? opts.first : val,
+        decoration: _dec(label),
+        style: const TextStyle(fontSize: 14),
+        items: items,
+        onChanged: widget.isReadOnly ? null : (v) => onChanged(v ?? val),
+      ),
     );
   }
 
@@ -392,7 +457,8 @@ class _PatientDialogState extends State<_PatientDialog> {
         children: [
           _secHeader('Personal details', 0),
           _row([
-            _drop('Title', _title, _kTitles, (v) => setState(() => _title = v)),
+            _drop('Title', _title, _kTitles, (v) => setState(() => _title = v),
+                autofocus: !widget.isReadOnly),
             _drop('Gender', _gender, _kGenders,
                 (v) => setState(() => _gender = v)),
           ]),
@@ -497,7 +563,10 @@ class _PatientDialogState extends State<_PatientDialog> {
           _row([
             _field('Height (cm)', _height, kb: TextInputType.number),
             _field('Weight (kg)', _weight, kb: TextInputType.number),
-            _field('BP', _bp, hint: '120/80'),
+            _field('BP', _bp,
+                hint: '120/80',
+                action: TextInputAction.done,
+                onSubmitted: (_) => _save()),
           ]),
           const SizedBox(height: 12),
         ],
@@ -633,6 +702,7 @@ class _PatientDialogState extends State<_PatientDialog> {
                           // FIX: added missing `child:` parameter to AnimatedContainer
                           return InkWell(
                             onTap: () => _jumpTo(i),
+                            canRequestFocus: false,
                             child: AnimatedContainer(
                               duration: const Duration(milliseconds: 150),
                               padding: const EdgeInsets.symmetric(
@@ -682,23 +752,25 @@ class _PatientDialogState extends State<_PatientDialog> {
 
                     // Form area
                     Expanded(
-                      child: SingleChildScrollView(
-                        controller: _scrollCtrl,
-                        padding: const EdgeInsets.all(24),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            _buildPersonal(),
-                            const SizedBox(height: 28),
-                            _buildContact(),
-                            const SizedBox(height: 28),
-                            _buildIdentity(),
-                            const SizedBox(height: 28),
-                            _buildReferral(),
-                            const SizedBox(height: 28),
-                            _buildClinical(),
-                            const SizedBox(height: 8),
-                          ],
+                      child: FocusTraversalGroup(
+                        child: SingleChildScrollView(
+                          controller: _scrollCtrl,
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              _buildPersonal(),
+                              const SizedBox(height: 28),
+                              _buildContact(),
+                              const SizedBox(height: 28),
+                              _buildIdentity(),
+                              const SizedBox(height: 28),
+                              _buildReferral(),
+                              const SizedBox(height: 28),
+                              _buildClinical(),
+                              const SizedBox(height: 8),
+                            ],
+                          ),
                         ),
                       ),
                     ),
@@ -729,7 +801,7 @@ class _PatientDialogState extends State<_PatientDialog> {
                     const SizedBox(width: 8),
                     if (!widget.isReadOnly)
                       FilledButton.icon(
-                        onPressed: _save,
+                        onPressed: _isDirty() ? _save : null,
                         icon: Icon(
                             isNew
                                 ? Icons.person_add_outlined

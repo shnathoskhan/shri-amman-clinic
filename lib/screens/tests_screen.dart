@@ -384,6 +384,19 @@ class _SimpleNameTabState extends State<_SimpleNameTab> {
           child: TextField(
             controller: ctrl,
             autofocus: true,
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) async {
+              final name = ctrl.text.trim();
+              if (name.isEmpty) return;
+              final col =
+                  FirebaseFirestore.instance.collection(widget.collection);
+              if (doc == null) {
+                await col.add({'name': name});
+              } else {
+                await doc.reference.update({'name': name});
+              }
+              if (c.mounted) Navigator.pop(c);
+            },
             decoration: InputDecoration(
               labelText: 'Name',
               border: const OutlineInputBorder(),
@@ -510,6 +523,7 @@ class _ParametersTabState extends State<_ParametersTab> {
               TextField(
                 controller: nameCtrl,
                 autofocus: true,
+                textInputAction: TextInputAction.next,
                 decoration: const InputDecoration(
                     labelText: 'Parameter name', border: OutlineInputBorder()),
               ),
@@ -519,6 +533,7 @@ class _ParametersTabState extends State<_ParametersTab> {
                   Expanded(
                     child: TextField(
                       controller: unitCtrl,
+                      textInputAction: TextInputAction.next,
                       decoration: const InputDecoration(
                           labelText: 'Unit',
                           hintText: 'e.g. mg/dL',
@@ -529,6 +544,7 @@ class _ParametersTabState extends State<_ParametersTab> {
                   Expanded(
                     child: TextField(
                       controller: rangeCtrl,
+                      textInputAction: TextInputAction.next,
                       decoration: const InputDecoration(
                           labelText: 'Reference range',
                           hintText: 'e.g. 70–100',
@@ -542,6 +558,26 @@ class _ParametersTabState extends State<_ParametersTab> {
                 controller: priceCtrl,
                 keyboardType:
                     const TextInputType.numberWithOptions(decimal: true),
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) async {
+                  final name = nameCtrl.text.trim();
+                  if (name.isEmpty) return;
+                  final price = double.tryParse(priceCtrl.text.trim()) ?? 0.0;
+                  final payload = {
+                    'name': name,
+                    'unit': unitCtrl.text.trim(),
+                    'referenceRange': rangeCtrl.text.trim(),
+                    'price': price,
+                  };
+                  if (doc == null) {
+                    await FirebaseFirestore.instance
+                        .collection('parameters')
+                        .add(payload);
+                  } else {
+                    await doc.reference.update(payload);
+                  }
+                  if (c.mounted) Navigator.pop(c);
+                },
                 decoration: const InputDecoration(
                     labelText: 'Price (₹)',
                     hintText: 'e.g. 150',
@@ -915,6 +951,7 @@ class _ProfileDialogState extends State<_ProfileDialog> {
                           child: TextField(
                             controller: widget.titleCtrl,
                             autofocus: true,
+                            textInputAction: TextInputAction.next,
                             decoration: const InputDecoration(
                               labelText: 'Profile title',
                               hintText: 'e.g. Lipid Profile, CBC…',
@@ -930,6 +967,8 @@ class _ProfileDialogState extends State<_ProfileDialog> {
                             controller: widget.priceCtrl,
                             keyboardType: const TextInputType.numberWithOptions(
                                 decimal: true),
+                            textInputAction: TextInputAction.done,
+                            onSubmitted: (_) => _save(),
                             decoration: const InputDecoration(
                               labelText: 'Price (₹)',
                               border: OutlineInputBorder(),

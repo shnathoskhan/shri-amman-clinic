@@ -1,5 +1,6 @@
 // lib/screens/refer_screen.dart
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shri_amman_clinic/widgets/base_layout.dart';
 
@@ -358,6 +359,7 @@ class _DoctorsTabState extends State<_DoctorsTab> {
                 TextField(
                   controller: nameCtrl,
                   autofocus: true,
+                  textInputAction: TextInputAction.next,
                   decoration: const InputDecoration(
                       labelText: 'Doctor name', border: OutlineInputBorder()),
                 ),
@@ -367,6 +369,7 @@ class _DoctorsTabState extends State<_DoctorsTab> {
                     Expanded(
                       child: TextField(
                         controller: phoneCtrl,
+                        textInputAction: TextInputAction.next,
                         decoration: const InputDecoration(
                             labelText: 'Phone', border: OutlineInputBorder()),
                       ),
@@ -375,6 +378,7 @@ class _DoctorsTabState extends State<_DoctorsTab> {
                     Expanded(
                       child: TextField(
                         controller: emailCtrl,
+                        textInputAction: TextInputAction.next,
                         decoration: const InputDecoration(
                             labelText: 'Email', border: OutlineInputBorder()),
                       ),
@@ -387,6 +391,7 @@ class _DoctorsTabState extends State<_DoctorsTab> {
                     Expanded(
                       child: TextField(
                         controller: specialistCtrl,
+                        textInputAction: TextInputAction.next,
                         decoration: const InputDecoration(
                             labelText: 'Specialist / Specialty',
                             border: OutlineInputBorder()),
@@ -394,23 +399,29 @@ class _DoctorsTabState extends State<_DoctorsTab> {
                     ),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: DropdownButtonFormField<String>(
-                        decoration: const InputDecoration(
-                            labelText: 'Hospital',
-                            border: OutlineInputBorder()),
-                        initialValue: selectedHospital,
-                        items: [
-                          const DropdownMenuItem(
-                              value: null, child: Text('None')),
-                          ...hospitals.map((h) {
-                            final hd = h.data() as Map<String, dynamic>;
-                            return DropdownMenuItem(
-                              value: h.id,
-                              child: Text(hd['name']?.toString() ?? 'Unknown'),
-                            );
-                          }),
-                        ],
-                        onChanged: (v) => setState(() => selectedHospital = v),
+                      child: Shortcuts(
+                        shortcuts: const <ShortcutActivator, Intent>{
+                          SingleActivator(LogicalKeyboardKey.enter): NextFocusIntent(),
+                          SingleActivator(LogicalKeyboardKey.numpadEnter): NextFocusIntent(),
+                        },
+                        child: DropdownButtonFormField<String>(
+                          decoration: const InputDecoration(
+                              labelText: 'Hospital',
+                              border: OutlineInputBorder()),
+                          initialValue: selectedHospital,
+                          items: [
+                            const DropdownMenuItem(
+                                value: null, child: Text('None')),
+                            ...hospitals.map((h) {
+                              final hd = h.data() as Map<String, dynamic>;
+                              return DropdownMenuItem(
+                                value: h.id,
+                                child: Text(hd['name']?.toString() ?? 'Unknown'),
+                              );
+                            }),
+                          ],
+                          onChanged: (v) => setState(() => selectedHospital = v),
+                        ),
                       ),
                     ),
                   ],
@@ -580,6 +591,7 @@ class _LabsTabState extends State<_LabsTab> {
               TextField(
                 controller: nameCtrl,
                 autofocus: true,
+                textInputAction: TextInputAction.next,
                 decoration: const InputDecoration(
                     labelText: 'Lab name', border: OutlineInputBorder()),
               ),
@@ -589,6 +601,7 @@ class _LabsTabState extends State<_LabsTab> {
                   Expanded(
                     child: TextField(
                       controller: phoneCtrl,
+                      textInputAction: TextInputAction.next,
                       decoration: const InputDecoration(
                           labelText: 'Phone', border: OutlineInputBorder()),
                     ),
@@ -597,6 +610,7 @@ class _LabsTabState extends State<_LabsTab> {
                   Expanded(
                     child: TextField(
                       controller: emailCtrl,
+                      textInputAction: TextInputAction.next,
                       decoration: const InputDecoration(
                           labelText: 'Email', border: OutlineInputBorder()),
                     ),
@@ -606,6 +620,24 @@ class _LabsTabState extends State<_LabsTab> {
               const SizedBox(height: 12),
               TextField(
                 controller: addressCtrl,
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) async {
+                  final name = nameCtrl.text.trim();
+                  if (name.isEmpty) return;
+                  final payload = {
+                    'name': name,
+                    'phone': phoneCtrl.text.trim(),
+                    'email': emailCtrl.text.trim(),
+                    'address': addressCtrl.text.trim(),
+                  };
+                  final col = FirebaseFirestore.instance.collection('labs');
+                  if (doc == null) {
+                    await col.add(payload);
+                  } else {
+                    await doc.reference.update(payload);
+                  }
+                  if (c.mounted) Navigator.pop(c);
+                },
                 decoration: const InputDecoration(
                     labelText: 'Address', border: OutlineInputBorder()),
               ),
@@ -746,6 +778,7 @@ class _HospitalsTabState extends State<_HospitalsTab> {
               TextField(
                 controller: nameCtrl,
                 autofocus: true,
+                textInputAction: TextInputAction.next,
                 decoration: const InputDecoration(
                     labelText: 'Hospital name', border: OutlineInputBorder()),
               ),
@@ -755,6 +788,7 @@ class _HospitalsTabState extends State<_HospitalsTab> {
                   Expanded(
                     child: TextField(
                       controller: phoneCtrl,
+                      textInputAction: TextInputAction.next,
                       decoration: const InputDecoration(
                           labelText: 'Phone', border: OutlineInputBorder()),
                     ),
@@ -763,6 +797,7 @@ class _HospitalsTabState extends State<_HospitalsTab> {
                   Expanded(
                     child: TextField(
                       controller: emailCtrl,
+                      textInputAction: TextInputAction.next,
                       decoration: const InputDecoration(
                           labelText: 'Email', border: OutlineInputBorder()),
                     ),
@@ -772,6 +807,24 @@ class _HospitalsTabState extends State<_HospitalsTab> {
               const SizedBox(height: 12),
               TextField(
                 controller: addressCtrl,
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) async {
+                  final name = nameCtrl.text.trim();
+                  if (name.isEmpty) return;
+                  final payload = {
+                    'name': name,
+                    'phone': phoneCtrl.text.trim(),
+                    'email': emailCtrl.text.trim(),
+                    'address': addressCtrl.text.trim(),
+                  };
+                  final col = FirebaseFirestore.instance.collection('hospitals');
+                  if (doc == null) {
+                    await col.add(payload);
+                  } else {
+                    await doc.reference.update(payload);
+                  }
+                  if (c.mounted) Navigator.pop(c);
+                },
                 decoration: const InputDecoration(
                     labelText: 'Address', border: OutlineInputBorder()),
               ),
