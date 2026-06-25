@@ -20,16 +20,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
   static const _tealBg = Color(0xFFE1F5EE);
   static const _coral = Color(0xFF993C1D);
   static const _coralBg = Color(0xFFFAECE7);
-  static const _blue = Color(0xFF185FA5);
-  static const _blueBg = Color(0xFFE6F1FB);
   static const _amber = Color(0xFF854F0B);
   static const _amberBg = Color(0xFFFAEEDA);
   static const _green = Color(0xFF3B6D11);
   static const _greenBg = Color(0xFFEAF3DE);
   static const _pink = Color(0xFF993556);
   static const _pinkBg = Color(0xFFFBEAF0);
-  static const _gray = Color(0xFF5F5E5A);
-  static const _grayBg = Color(0xFFF1EFE8);
 
   // ─── State ──────────────────────────────────────────────────────────────────
   String _selectedDuration = 'Last 30 days';
@@ -76,8 +72,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   int staffCount = 0;
   String staffDelta = '';
 
-  List<FlSpot> _chartSpots = [];
-  double _chartAvg = 0;
+  List<FlSpot> _patientSpots = [];
+  List<FlSpot> _reportSpots = [];
   double _chartIntervalY = 1.0;
 
   // ─── Lifecycle ──────────────────────────────────────────────────────────────
@@ -258,10 +254,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _loadChartData() {
-    if (_patientDocs.isEmpty) {
+    if (_patientDocs.isEmpty && _reportDocs.isEmpty) {
       setState(() {
-        _chartSpots = [const FlSpot(0, 0)];
-        _chartAvg = 0;
+        _patientSpots = [const FlSpot(0, 0)];
+        _reportSpots = [const FlSpot(0, 0)];
         _chartIntervalY = 1.0;
       });
       return;
@@ -270,9 +266,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final now = DateTime.now();
     final todayStart = DateTime(now.year, now.month, now.day);
 
-    List<FlSpot> spots = [];
+    List<FlSpot> patientSpots = [];
+    List<FlSpot> reportSpots = [];
     double intervalY = 1.0;
-    double avg = 0;
 
     if (_selectedDuration == 'Today' || _selectedDuration == 'Yesterday') {
       // 24 hourly spots
@@ -282,9 +278,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final targetDayEnd = targetDayStart
           .add(const Duration(hours: 23, minutes: 59, seconds: 59));
 
-      final Map<int, int> regsPerHour = {};
+      final Map<int, int> patientPerHour = {};
+      final Map<int, int> reportPerHour = {};
       for (int i = 0; i < 24; i++) {
-        regsPerHour[i] = 0;
+        patientPerHour[i] = 0;
+        reportPerHour[i] = 0;
       }
 
       for (final doc in _patientDocs) {
@@ -292,12 +290,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
         if (d == null) continue;
         if (d.isAfter(targetDayStart) && d.isBefore(targetDayEnd)) {
           final hour = d.hour;
-          regsPerHour[hour] = (regsPerHour[hour] ?? 0) + 1;
+          patientPerHour[hour] = (patientPerHour[hour] ?? 0) + 1;
         }
       }
 
-      spots = List.generate(24, (i) {
-        return FlSpot(i.toDouble(), (regsPerHour[i] ?? 0).toDouble());
+      for (final doc in _reportDocs) {
+        final d = _getDocDate(doc);
+        if (d == null) continue;
+        if (d.isAfter(targetDayStart) && d.isBefore(targetDayEnd)) {
+          final hour = d.hour;
+          reportPerHour[hour] = (reportPerHour[hour] ?? 0) + 1;
+        }
+      }
+
+      patientSpots = List.generate(24, (i) {
+        return FlSpot(i.toDouble(), (patientPerHour[i] ?? 0).toDouble());
+      });
+      reportSpots = List.generate(24, (i) {
+        return FlSpot(i.toDouble(), (reportPerHour[i] ?? 0).toDouble());
       });
     } else {
       // Daily spots
@@ -309,9 +319,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
       final cutoff = todayStart.subtract(Duration(days: days - 1));
 
-      final Map<int, int> registrationsPerDay = {};
+      final Map<int, int> patientPerDay = {};
+      final Map<int, int> reportPerDay = {};
       for (int i = 0; i < days; i++) {
-        registrationsPerDay[i] = 0;
+        patientPerDay[i] = 0;
+        reportPerDay[i] = 0;
       }
 
       for (final doc in _patientDocs) {
@@ -320,28 +332,42 @@ class _DashboardScreenState extends State<DashboardScreen> {
         if (d.isAfter(cutoff) || d.isAtSameMomentAs(cutoff)) {
           final diffDays = d.difference(cutoff).inDays;
           if (diffDays >= 0 && diffDays < days) {
-            registrationsPerDay[diffDays] =
-                (registrationsPerDay[diffDays] ?? 0) + 1;
+            patientPerDay[diffDays] = (patientPerDay[diffDays] ?? 0) + 1;
           }
         }
       }
 
-      spots = List.generate(days, (i) {
-        return FlSpot(i.toDouble(), (registrationsPerDay[i] ?? 0).toDouble());
+      for (final doc in _reportDocs) {
+        final d = _getDocDate(doc);
+        if (d == null) continue;
+        if (d.isAfter(cutoff) || d.isAtSameMomentAs(cutoff)) {
+          final diffDays = d.difference(cutoff).inDays;
+          if (diffDays >= 0 && diffDays < days) {
+            reportPerDay[diffDays] = (reportPerDay[diffDays] ?? 0) + 1;
+          }
+        }
+      }
+
+      patientSpots = List.generate(days, (i) {
+        return FlSpot(i.toDouble(), (patientPerDay[i] ?? 0).toDouble());
+      });
+      reportSpots = List.generate(days, (i) {
+        return FlSpot(i.toDouble(), (reportPerDay[i] ?? 0).toDouble());
       });
     }
 
-    final totalRegistrations =
-        spots.isEmpty ? 0.0 : spots.map((s) => s.y).reduce((a, b) => a + b);
-    avg = spots.isEmpty ? 0.0 : totalRegistrations / spots.length;
-    final maxVal = spots.isEmpty
+    final maxPatient = patientSpots.isEmpty
         ? 0.0
-        : spots.map((s) => s.y).reduce((a, b) => a > b ? a : b);
+        : patientSpots.map((s) => s.y).reduce((a, b) => a > b ? a : b);
+    final maxReport = reportSpots.isEmpty
+        ? 0.0
+        : reportSpots.map((s) => s.y).reduce((a, b) => a > b ? a : b);
+    final maxVal = maxPatient > maxReport ? maxPatient : maxReport;
     intervalY = maxVal > 5 ? (maxVal / 5).ceilToDouble() : 1.0;
 
     setState(() {
-      _chartSpots = spots;
-      _chartAvg = avg;
+      _patientSpots = patientSpots;
+      _reportSpots = reportSpots;
       _chartIntervalY = intervalY;
     });
   }
@@ -432,8 +458,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   // ─── Line chart ─────────────────────────────────────────────────────────────
   Widget _buildLineChart() {
-    final avgSpots = _chartSpots.map((s) => FlSpot(s.x, _chartAvg)).toList();
-
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -448,7 +472,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'Patient registrations ($_selectedDuration)',
+                'Patients & Reports ($_selectedDuration)',
                 style:
                     const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
               ),
@@ -460,9 +484,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
             child: LineChart(
               LineChartData(
                 lineBarsData: [
-                  // Main visits line
+                  // Patients line
                   LineChartBarData(
-                    spots: _chartSpots,
+                    spots: _patientSpots,
                     isCurved: true,
                     color: _purple,
                     barWidth: 2,
@@ -472,14 +496,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       color: _purple.withOpacity(0.07),
                     ),
                   ),
-                  // Avg reference line
+                  // Reports line
                   LineChartBarData(
-                    spots: avgSpots,
-                    isCurved: false,
-                    color: _teal,
-                    barWidth: 1.5,
-                    dashArray: [5, 4],
+                    spots: _reportSpots,
+                    isCurved: true,
+                    color: _coral,
+                    barWidth: 2,
                     dotData: const FlDotData(show: false),
+                    belowBarData: BarAreaData(
+                      show: true,
+                      color: _coral.withOpacity(0.07),
+                    ),
                   ),
                 ],
                 gridData: FlGridData(
@@ -523,7 +550,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         .map((s) => LineTooltipItem(
                               s.y.toInt().toString(),
                               TextStyle(
-                                color: s.barIndex == 0 ? _purple : _teal,
+                                color: s.barIndex == 0 ? _purple : _coral,
                                 fontWeight: FontWeight.w600,
                                 fontSize: 12,
                               ),
@@ -538,10 +565,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
           // Legend
           Row(
             children: [
-              _legendItem(
-                  color: _purple, label: 'Registrations', dashed: false),
+              _legendItem(color: _purple, label: 'Patients', dashed: false),
               const SizedBox(width: 20),
-              _legendItem(color: _teal, label: 'Average', dashed: true),
+              _legendItem(color: _coral, label: 'Reports', dashed: false),
             ],
           ),
         ],
@@ -717,14 +743,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   delta: patientDelta,
                 ),
                 _buildStatCard(
-                  label: 'Appointments',
-                  value: appointmentCount,
-                  icon: Icons.calendar_today_outlined,
-                  iconColor: _blue,
-                  iconBg: _blueBg,
-                  delta: appointmentDelta,
-                ),
-                _buildStatCard(
                   label: 'Doctors',
                   value: doctorCount,
                   icon: Icons.medical_services_outlined,
@@ -763,14 +781,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   iconColor: _pink,
                   iconBg: _pinkBg,
                   delta: departmentDelta,
-                ),
-                _buildStatCard(
-                  label: 'Total staff',
-                  value: staffCount,
-                  icon: Icons.groups_outlined,
-                  iconColor: _gray,
-                  iconBg: _grayBg,
-                  delta: staffDelta,
                 ),
               ],
             ),
