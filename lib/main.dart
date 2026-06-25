@@ -28,7 +28,7 @@ class MyApp extends StatelessWidget {
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, child) {
           return MaterialApp.router(
-            title: 'Shri Amman Clinic',
+            title: 'Shri Amman Clinic & Lab',
             theme: themeProvider.currentTheme,
             routerConfig: goRouter,
             debugShowCheckedModeBanner: false,

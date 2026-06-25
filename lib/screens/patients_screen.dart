@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shri_amman_clinic/widgets/base_layout.dart';
 import 'package:barcode_widget/barcode_widget.dart';
+import 'package:shri_amman_clinic/screens/reports_screen.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -38,12 +39,12 @@ const _sections = [
 // ─────────────────────────────────────────────────────────────────────────────
 // Public dialog entry-point
 // ─────────────────────────────────────────────────────────────────────────────
-Future<void> showPatientDialog(
+Future<DocumentSnapshot?> showPatientDialog(
   BuildContext context, {
   DocumentSnapshot? doc,
   bool isReadOnly = false,
 }) {
-  return showDialog(
+  return showDialog<DocumentSnapshot?>(
     context: context,
     barrierDismissible: false,
     builder: (_) => _PatientDialog(doc: doc, isReadOnly: isReadOnly),
@@ -335,10 +336,12 @@ class _PatientDialogState extends State<_PatientDialog> {
       final ref =
           await FirebaseFirestore.instance.collection('patients').add(data);
       await ref.update({'id': ref.id});
+      final docSnap = await ref.get();
+      if (mounted) Navigator.of(context).pop(docSnap);
     } else {
       await widget.doc!.reference.update(data);
+      if (mounted) Navigator.of(context).pop();
     }
-    if (mounted) Navigator.of(context).pop();
   }
 
   // ── Build helpers ──────────────────────────────────────────────────────────
@@ -971,7 +974,39 @@ class _PatientsScreenState extends State<PatientsScreen> {
                         ),
                         const SizedBox(width: 12),
                         FilledButton.icon(
-                          onPressed: () => showPatientDialog(context),
+                          onPressed: () async {
+                            final newPatient = await showPatientDialog(context);
+                            if (newPatient != null && context.mounted) {
+                              final createReport = await showDialog<bool>(
+                                context: context,
+                                builder: (c) => AlertDialog(
+                                  title: Row(
+                                    children: [
+                                      Icon(Icons.check_circle_rounded,
+                                          color: Theme.of(context).colorScheme.primary),
+                                      const SizedBox(width: 8),
+                                      const Text('Patient Created'),
+                                    ],
+                                  ),
+                                  content: Text(
+                                      'Patient "${newPatient['fullName'] ?? ''}" has been created successfully.\n\nWould you like to create a diagnostic report for this patient now?'),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.of(c).pop(false),
+                                      child: const Text('No, Later'),
+                                    ),
+                                    FilledButton(
+                                      onPressed: () => Navigator.of(c).pop(true),
+                                      child: const Text('Yes, Create Report'),
+                                    ),
+                                  ],
+                                ),
+                              );
+                              if (createReport == true && context.mounted) {
+                                showReportDialog(context, initialPatient: newPatient);
+                              }
+                            }
+                          },
                           icon: const Icon(Icons.add_rounded, size: 18),
                           label: const Text('Add patient'),
                         ),
@@ -1028,6 +1063,8 @@ class _PatientsScreenState extends State<PatientsScreen> {
                                 onEdit: (d) =>
                                     showPatientDialog(context, doc: d),
                                 onDelete: (d) => _confirmDelete(context, d),
+                                onCreateReport: (d) =>
+                                    showReportDialog(context, initialPatient: d),
                               ),
                             ),
                     ),
@@ -1052,11 +1089,12 @@ class _PatientDataSource extends DataTableSource {
     required this.onView,
     required this.onEdit,
     required this.onDelete,
+    required this.onCreateReport,
   });
 
   final List<DocumentSnapshot> docs;
   final BuildContext context;
-  final void Function(DocumentSnapshot) onView, onEdit, onDelete;
+  final void Function(DocumentSnapshot) onView, onEdit, onDelete, onCreateReport;
 
   @override
   DataRow? getRow(int i) {
@@ -1104,6 +1142,11 @@ class _PatientDataSource extends DataTableSource {
         DataCell(Row(
           mainAxisSize: MainAxisSize.min,
           children: [
+            _ActionBtn(
+                icon: Icons.add_chart_rounded,
+                tooltip: 'Create Report',
+                color: Theme.of(context).colorScheme.primary,
+                onPressed: () => onCreateReport(doc)),
             _ActionBtn(
                 icon: Icons.visibility_outlined,
                 tooltip: 'View',

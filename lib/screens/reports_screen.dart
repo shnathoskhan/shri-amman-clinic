@@ -82,18 +82,28 @@ Future<void> showReportDialog(
   BuildContext context, {
   DocumentSnapshot? doc,
   bool isReadOnly = false,
+  DocumentSnapshot? initialPatient,
 }) {
   return showDialog(
     context: context,
     barrierDismissible: false,
-    builder: (_) => _AddReportDialog(doc: doc, isReadOnly: isReadOnly),
+    builder: (_) => _AddReportDialog(
+      doc: doc,
+      isReadOnly: isReadOnly,
+      initialPatient: initialPatient,
+    ),
   );
 }
 
 class _AddReportDialog extends StatefulWidget {
   final DocumentSnapshot? doc;
   final bool isReadOnly;
-  const _AddReportDialog({this.doc, this.isReadOnly = false});
+  final DocumentSnapshot? initialPatient;
+  const _AddReportDialog({
+    this.doc,
+    this.isReadOnly = false,
+    this.initialPatient,
+  });
 
   @override
   State<_AddReportDialog> createState() => _AddReportDialogState();
@@ -221,6 +231,22 @@ class _AddReportDialogState extends State<_AddReportDialog> {
 
           if (widget.doc != null) {
             _populateFromDoc();
+          } else if (widget.initialPatient != null) {
+            try {
+              _selectedPatient = _patients.firstWhere((p) => p.id == widget.initialPatient!.id);
+            } catch (_) {
+              _selectedPatient = widget.initialPatient;
+            }
+            if (_selectedPatient != null) {
+              final pData = _selectedPatient!.data() as Map<String, dynamic>;
+              _patientSearchCtrl.text = '${pData['fullName'] ?? ''} (${pData['patient_id'] ?? ''})';
+              _referralDr = pData['referralDr'] ?? '';
+              if (!_doctors.contains(_referralDr)) _referralDr = '';
+              _referralHospital = pData['referralHospital'] ?? '';
+              if (!_hospitals.contains(_referralHospital)) _referralHospital = '';
+              _referralLab = pData['referralLab'] ?? '';
+              if (!_labs.contains(_referralLab)) _referralLab = '';
+            }
           }
 
           _loading = false;
