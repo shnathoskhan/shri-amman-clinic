@@ -1,11 +1,11 @@
 {
-    "name": "shri_amman_clinic",
-    "short_name": "shri_amman_clinic",
+    "name": "Shri Amman Clinic & Lab",
+    "short_name": "Shri Amman Clinic & Lab",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "Clinic Management Software",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

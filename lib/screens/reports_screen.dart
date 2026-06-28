@@ -233,17 +233,20 @@ class _AddReportDialogState extends State<_AddReportDialog> {
             _populateFromDoc();
           } else if (widget.initialPatient != null) {
             try {
-              _selectedPatient = _patients.firstWhere((p) => p.id == widget.initialPatient!.id);
+              _selectedPatient = _patients
+                  .firstWhere((p) => p.id == widget.initialPatient!.id);
             } catch (_) {
               _selectedPatient = widget.initialPatient;
             }
             if (_selectedPatient != null) {
               final pData = _selectedPatient!.data() as Map<String, dynamic>;
-              _patientSearchCtrl.text = '${pData['fullName'] ?? ''} (${pData['patient_id'] ?? ''})';
+              _patientSearchCtrl.text =
+                  '${pData['fullName'] ?? ''} (${pData['patient_id'] ?? ''})';
               _referralDr = pData['referralDr'] ?? '';
               if (!_doctors.contains(_referralDr)) _referralDr = '';
               _referralHospital = pData['referralHospital'] ?? '';
-              if (!_hospitals.contains(_referralHospital)) _referralHospital = '';
+              if (!_hospitals.contains(_referralHospital))
+                _referralHospital = '';
               _referralLab = pData['referralLab'] ?? '';
               if (!_labs.contains(_referralLab)) _referralLab = '';
             }
@@ -481,18 +484,139 @@ class _AddReportDialogState extends State<_AddReportDialog> {
         reportData['report_id'] = reportId;
         reportData['sid'] = sampleId;
         reportData['createdAt'] = FieldValue.serverTimestamp();
-        reportData['status'] = 'Pending';
-        await FirebaseFirestore.instance.collection('reports').add(reportData);
+        final docRef = await FirebaseFirestore.instance
+            .collection('reports')
+            .add(reportData);
+        if (mounted) {
+          final newDoc = await docRef.get();
+          final mobile =
+              ((_selectedPatient!.data() as Map<String, dynamic>)['mobile'] ??
+                      '')
+                  .toString();
+          await _showPrintShareDialog(
+              context, newDoc, mobile, _status, _paymentStatus);
+          if (mounted) Navigator.pop(context, true);
+        }
       } else {
         await widget.doc!.reference.update(reportData);
+        if (mounted) Navigator.pop(context, true);
       }
-      if (mounted) Navigator.pop(context, true);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('Failed to save report: $e')));
       }
     }
+  }
+
+  /// Shows a print/share popup after report creation.
+  /// Print Report / Share Report only shown if [status] == 'Completed'.
+  /// Print Bill / Share Bill only shown if [paymentStatus] == 'Paid'.
+  Future<void> _showPrintShareDialog(
+    BuildContext ctx,
+    DocumentSnapshot doc,
+    String mobile,
+    String status,
+    String paymentStatus,
+  ) async {
+    final showReport = status == 'Completed';
+    final showBill = paymentStatus == 'Paid';
+    if (!showReport && !showBill) return;
+    if (!ctx.mounted) return;
+
+    final data = doc.data() as Map<String, dynamic>;
+    final reportId = data['report_id'] ?? '';
+
+    await showDialog(
+      context: ctx,
+      barrierDismissible: true,
+      builder: (c) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+        contentPadding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
+        title: Row(
+          children: [
+            const Icon(Icons.check_circle_rounded,
+                color: Colors.green, size: 22),
+            const SizedBox(width: 8),
+            const Text('Report Saved'),
+            const Spacer(),
+            Text(reportId,
+                style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey.shade500,
+                    fontWeight: FontWeight.normal)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (showReport) ...[
+              const Padding(
+                padding: EdgeInsets.only(bottom: 6),
+                child: Text('Report',
+                    style:
+                        TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+              ),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.print_rounded, size: 16),
+                      label: const Text('Print'),
+                      onPressed: () async => PdfHelper.printReport(doc),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.share_rounded, size: 16),
+                      label: const Text('Share'),
+                      onPressed: () async => PdfHelper.shareReport(doc, mobile),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+            ],
+            if (showBill) ...[
+              const Padding(
+                padding: EdgeInsets.only(bottom: 6),
+                child: Text('Bill',
+                    style:
+                        TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+              ),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.receipt_long_rounded, size: 16),
+                      label: const Text('Print'),
+                      onPressed: () async => PdfHelper.printBill(doc),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.share_rounded, size: 16),
+                      label: const Text('Share'),
+                      onPressed: () async => PdfHelper.shareBill(doc, mobile),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c),
+            child: const Text('Skip'),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _drop(String label, String value, List<String> options,
@@ -847,7 +971,7 @@ class _AddReportDialogState extends State<_AddReportDialog> {
       },
       onSelected: (doc) {
         setState(() => _selectedSampleType = doc);
-        _testSearchFocusNode.requestFocus();
+        _departmentSearchFocusNode.requestFocus();
       },
       fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
         return TextField(
@@ -1938,6 +2062,60 @@ class _AddReportDialogState extends State<_AddReportDialog> {
               color: cs.surfaceContainerLow,
               child: Row(
                 children: [
+                  // ── Print / Share buttons in View mode ──────────────────
+                  if (widget.isReadOnly && widget.doc != null && !_loading) ...[
+                    // Report actions: only when status == 'Completed'
+                    if (_status == 'Completed') ...[
+                      _ViewActionBtn(
+                        icon: Icons.print_rounded,
+                        label: 'Print Report',
+                        color: Colors.blue,
+                        onPressed: () async =>
+                            PdfHelper.printReport(widget.doc!),
+                      ),
+                      const SizedBox(width: 6),
+                      _ViewActionBtn(
+                        icon: Icons.share_rounded,
+                        label: 'Share Report',
+                        color: Colors.green,
+                        onPressed: () async {
+                          final mobile = _selectedPatient != null
+                              ? ((_selectedPatient!.data()
+                                          as Map<String, dynamic>)['mobile'] ??
+                                      '')
+                                  .toString()
+                              : '';
+                          await PdfHelper.shareReport(widget.doc!, mobile);
+                        },
+                      ),
+                      const SizedBox(width: 6),
+                    ],
+                    // Bill actions: only when paymentStatus == 'Paid'
+                    if (_paymentStatus == 'Paid') ...[
+                      _ViewActionBtn(
+                        icon: Icons.receipt_long_rounded,
+                        label: 'Print Bill',
+                        color: Colors.blueAccent,
+                        onPressed: () async => PdfHelper.printBill(widget.doc!),
+                      ),
+                      const SizedBox(width: 6),
+                      _ViewActionBtn(
+                        icon: Icons.share_rounded,
+                        label: 'Share Bill',
+                        color: Colors.teal,
+                        onPressed: () async {
+                          final mobile = _selectedPatient != null
+                              ? ((_selectedPatient!.data()
+                                          as Map<String, dynamic>)['mobile'] ??
+                                      '')
+                                  .toString()
+                              : '';
+                          await PdfHelper.shareBill(widget.doc!, mobile);
+                        },
+                      ),
+                      const SizedBox(width: 6),
+                    ],
+                  ],
                   const Spacer(),
                   TextButton(
                     onPressed: () => Navigator.pop(context),
@@ -2452,4 +2630,38 @@ class _RActionBtn extends StatelessWidget {
         visualDensity: VisualDensity.compact,
         onPressed: onPressed,
       );
+}
+
+/// Compact icon+label button used in the view-dialog footer for print/share.
+class _ViewActionBtn extends StatelessWidget {
+  const _ViewActionBtn({
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+    this.color,
+  });
+  final IconData icon;
+  final String label;
+  final VoidCallback onPressed;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: label,
+      child: OutlinedButton.icon(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: color,
+          side: BorderSide(color: (color ?? Colors.grey).withOpacity(0.5)),
+          visualDensity: VisualDensity.compact,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+        icon: Icon(icon, size: 15),
+        label: Text(label,
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+        onPressed: onPressed,
+      ),
+    );
+  }
 }
