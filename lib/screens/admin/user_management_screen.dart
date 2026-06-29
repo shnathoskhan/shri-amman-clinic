@@ -146,7 +146,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                     final cred = await FirebaseAuth.instance
                         .createUserWithEmailAndPassword(
                       email: email,
-                      password: 'SAC@12345',
+                      password: 'SACL@12345',
                     );
                     final uid = cred.user?.uid ?? '';
                     await FirebaseFirestore.instance

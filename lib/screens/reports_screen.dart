@@ -484,6 +484,7 @@ class _AddReportDialogState extends State<_AddReportDialog> {
         reportData['report_id'] = reportId;
         reportData['sid'] = sampleId;
         reportData['createdAt'] = FieldValue.serverTimestamp();
+        reportData['sampleCollected'] = FieldValue.serverTimestamp();
         final docRef = await FirebaseFirestore.instance
             .collection('reports')
             .add(reportData);

@@ -21,21 +21,11 @@ const _error = PdfColor.fromInt(0xFFD32F2F);
 // ─────────────────────────────────────────────────────────────────────────────
 
 final _fmt = DateFormat('dd MMM yyyy');
-final _fmtT = DateFormat('dd/MM/yyyy hh:mm a');
 
 String _fd(dynamic ts) {
   if (ts == null) return '—';
   try {
     return _fmt.format((ts as Timestamp).toDate());
-  } catch (_) {
-    return ts.toString();
-  }
-}
-
-String _fdt(dynamic ts) {
-  if (ts == null) return '—';
-  try {
-    return _fmtT.format((ts as Timestamp).toDate());
   } catch (_) {
     return ts.toString();
   }
@@ -93,9 +83,9 @@ class PdfHelper {
     final headerImgData = await rootBundle.load('assets/header.png');
     final headerImg = pw.MemoryImage(headerImgData.buffer.asUint8List());
 
-    final font = await PdfGoogleFonts.notoSansRegular();
-    final fontBold = await PdfGoogleFonts.notoSansBold();
-    final fontItal = await PdfGoogleFonts.notoSansItalic();
+    final font = await PdfGoogleFonts.latoRegular();
+    final fontBold = await PdfGoogleFonts.latoBold();
+    final fontItal = await PdfGoogleFonts.latoItalic();
     return (logo, headerImg, font, fontBold, fontItal);
   }
 
@@ -183,104 +173,176 @@ class PdfHelper {
 
     final reportId = _s('report_id', 'REPORT');
 
-    // Helper functions for meta rows inside the header
     pw.Widget row(String l, String v) => pw.Padding(
-        padding: const pw.EdgeInsets.only(bottom: 1.5),
-        child: pw.Row(children: [
-          pw.SizedBox(
-              width: 50,
-              child: pw.Text(l,
-                  style:
-                      pw.TextStyle(font: bold, fontSize: 6.5, color: _grey))),
-          pw.Text(': ',
-              style: pw.TextStyle(font: font, fontSize: 6.5, color: _grey)),
-          pw.Expanded(
-              child: pw.Text(v,
+          padding: const pw.EdgeInsets.only(bottom: 2),
+          child: pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.SizedBox(
+                width: 75,
+                child: pw.Text(
+                  l,
                   style: pw.TextStyle(
-                      font: font, fontSize: 6.5, color: PdfColors.black))),
-        ]));
+                    font: bold,
+                    fontSize: 6.5,
+                    color: _grey,
+                  ),
+                ),
+              ),
+              pw.Text(
+                ': ',
+                style: pw.TextStyle(
+                  font: font,
+                  fontSize: 6.5,
+                  color: _grey,
+                ),
+              ),
+              pw.Expanded(
+                child: pw.Text(
+                  v,
+                  style: pw.TextStyle(
+                    font: font,
+                    fontSize: 6.5,
+                    color: PdfColors.black,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
 
-    // Resolve Referral text
     String ref = 'Self';
     final dr = _s('referralDr', '');
     final hosp = _s('referralHospital', '');
     final lab = _s('referralLab', '');
-    if (dr.isNotEmpty && dr != '— None —')
+
+    if (dr.isNotEmpty && dr != '— None —') {
       ref = 'Dr. $dr';
-    else if (hosp.isNotEmpty && hosp != '— None —')
+    } else if (hosp.isNotEmpty && hosp != '— None —') {
       ref = hosp;
-    else if (lab.isNotEmpty && lab != '— None —') ref = lab;
+    } else if (lab.isNotEmpty && lab != '— None —') {
+      ref = lab;
+    }
 
-    return pw.Column(children: [
-      // Stack allows placing Report Details directly on the right side of the image area
-      pw.Stack(
-        alignment: pw.Alignment.centerLeft,
-        children: [
-          // Full-width header background banner
-          pw.Container(
-            width: double.infinity,
-            child: pw.Image(headerImg, fit: pw.BoxFit.fill),
-          ),
-
-          // Floating Report Details Box on the Right side
-          pw.Positioned(
-            right: 28, // Aligns with your inner page layout boundaries
-            top: 10,
-            bottom: 10,
-            child: pw.Container(
-              width: 160,
-              padding: const pw.EdgeInsets.all(6),
-              decoration: pw.BoxDecoration(
-                color: PdfColors.white
-                    .withAlpha(0.9), // Slightly transparent white box
-                borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
-                border: pw.Border.all(color: _divLine, width: 0.5),
-              ),
-              child: pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                mainAxisAlignment: pw.MainAxisAlignment.center,
-                children: [
-                  pw.Text('REPORT DETAILS',
-                      style:
-                          pw.TextStyle(font: bold, fontSize: 7, color: _brand)),
-                  pw.SizedBox(height: 3),
-                  row('Report ID', reportId),
-                  row('Sample Type', _s('sampleType', '—')),
-                  row('SID', _s('sid', '—')),
-                  row('Referred By', ref),
-                  row('Generated', _fd(data['createdAt'])),
-                ],
+    return pw.Column(
+      children: [
+        pw.Stack(
+          children: [
+            // Header Banner
+            pw.Container(
+              height: 120,
+              width: double.infinity,
+              child: pw.Image(
+                headerImg,
+                fit: pw.BoxFit.fill,
               ),
             ),
-          ),
-        ],
-      ),
 
-      // ── Document-type accent strip remaining beneath your image ──
-      pw.Padding(
-        padding: const pw.EdgeInsets.symmetric(horizontal: 28),
-        child: pw.Container(
-          width: double.infinity,
-          color: _brandDark,
-          padding: const pw.EdgeInsets.symmetric(vertical: 2, horizontal: 10),
-          child: pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-            children: [
-              pw.Text(docType,
+            // Report Details Box
+            pw.Positioned(
+              right: 28,
+              top: 10,
+              bottom: 10,
+              child: pw.Container(
+                width: 190,
+                decoration: pw.BoxDecoration(
+                  color: PdfColors.white,
+                  borderRadius: const pw.BorderRadius.all(
+                    pw.Radius.circular(4),
+                  ),
+                  border: pw.Border.all(
+                    color: _divLine,
+                    width: 0.5,
+                  ),
+                ),
+                child: pw.Column(
+                  children: [
+                    pw.Spacer(),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.symmetric(horizontal: 10),
+                      child: pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Row(
+                            mainAxisAlignment:
+                                pw.MainAxisAlignment.spaceBetween,
+                            children: [
+                              pw.Text(
+                                'REPORT DETAILS',
+                                style: pw.TextStyle(
+                                  font: bold,
+                                  fontSize: 7,
+                                  color: _brand,
+                                ),
+                              ),
+                              if (reportId != 'REPORT')
+                                pw.SizedBox(
+                                  width: 55,
+                                  height: 12,
+                                  child: pw.BarcodeWidget(
+                                    barcode: pw.Barcode.code128(),
+                                    data: reportId,
+                                    drawText: false,
+                                  ),
+                                ),
+                            ],
+                          ),
+                          pw.SizedBox(height: 4),
+                          row('Report ID', reportId),
+                          row('Sample Type', _s('sampleType')),
+                          row('Sample ID (SID)', _s('sid')),
+                          row('Referred By', ref),
+                          row('Sample Collected', _fd(data['sampleCollected'])),
+                          row('Report Generated', _fd(data['createdAt'])),
+                        ],
+                      ),
+                    ),
+                    pw.Spacer(),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+
+        // Bottom Accent Strip
+        pw.Padding(
+          padding: const pw.EdgeInsets.symmetric(horizontal: 28),
+          child: pw.Container(
+            width: double.infinity,
+            color: _brandDark,
+            padding: const pw.EdgeInsets.symmetric(
+              vertical: 4,
+              horizontal: 10,
+            ),
+            child: pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text(
+                  docType,
                   style: pw.TextStyle(
-                      font: bold,
-                      fontSize: 8.5,
-                      color: PdfColors.white,
-                      letterSpacing: 1.5)),
-              pw.Text('Report ID: $reportId',
+                    font: bold,
+                    fontSize: 8.5,
+                    color: PdfColors.white,
+                    letterSpacing: 1.5,
+                  ),
+                ),
+                pw.Text(
+                  'Report ID: $reportId',
                   style: pw.TextStyle(
-                      font: font, fontSize: 7.5, color: PdfColors.white)),
-            ],
+                    font: font,
+                    fontSize: 7.5,
+                    color: PdfColors.white,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
-      ),
-      pw.SizedBox(height: 3),
-    ]);
+
+        pw.SizedBox(height: 3),
+      ],
+    );
   }
 
 // ── Patient Info Section Only (Full Width Layout) ──────────────────────────
@@ -428,7 +490,7 @@ class PdfHelper {
               pw.Text(title,
                   style:
                       pw.TextStyle(font: bold, fontSize: 8.5, color: _brand)),
-              pw.Text('₹ $price',
+              pw.Text('Rs. $price',
                   style:
                       pw.TextStyle(font: bold, fontSize: 8.5, color: _error)),
             ]),
@@ -441,7 +503,7 @@ class PdfHelper {
       pw.Container(
         padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         color: _brand,
-        child: pw.Text('GRAND TOTAL :  ₹ ${data['totalPrice'] ?? '0'}',
+        child: pw.Text('GRAND TOTAL :  Rs. ${data['totalPrice'] ?? '0'}',
             style:
                 pw.TextStyle(font: bold, fontSize: 10, color: PdfColors.white)),
       ),

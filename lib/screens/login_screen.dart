@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
+import 'package:shri_amman_clinic/theme.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({Key? key}) : super(key: key);
@@ -14,6 +16,7 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
+
   final _emailCtrl = TextEditingController();
   final _pwdCtrl = TextEditingController();
 
@@ -68,19 +71,81 @@ class _LoginScreenState extends State<LoginScreen> {
         }
       }
     } on FirebaseAuthException catch (e) {
-      setState(() => _errorMsg = e.message);
+      setState(() {
+        _errorMsg = e.message;
+      });
     } catch (e) {
-      setState(() => _errorMsg = e.toString());
+      setState(() {
+        _errorMsg = e.toString();
+      });
     } finally {
       if (mounted) {
-        setState(() => _loading = false);
+        setState(() {
+          _loading = false;
+        });
       }
+    }
+  }
+
+  Future<void> _resetPassword() async {
+    final email = _emailCtrl.text.trim();
+
+    if (email.isEmpty) {
+      setState(() {
+        _errorMsg = 'Please enter your email address';
+      });
+      return;
+    }
+
+    try {
+      await FirebaseAuth.instance.sendPasswordResetEmail(
+        email: email,
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Password reset email sent successfully',
+            ),
+          ),
+        );
+      }
+    } on FirebaseAuthException catch (e) {
+      setState(() {
+        _errorMsg = e.message;
+      });
+    } catch (e) {
+      setState(() {
+        _errorMsg = e.toString();
+      });
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        backgroundColor: Theme.of(context).colorScheme.onPrimary,
+        elevation: 1,
+        shadowColor: Colors.grey,
+        title: Text(
+          'SHRI AMMAN CLINIC & LAB',
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.primary,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        actions: [
+          IconButton(
+            tooltip: 'Toggle Theme',
+            icon: const Icon(Icons.brightness_6),
+            onPressed: () {
+              context.read<ThemeProvider>().toggleTheme();
+            },
+          ),
+        ],
+      ),
       body: LayoutBuilder(
         builder: (context, constraints) {
           final maxWidth =
@@ -93,33 +158,30 @@ class _LoginScreenState extends State<LoginScreen> {
                 vertical: 24,
               ),
               child: ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: maxWidth),
+                constraints: BoxConstraints(
+                  maxWidth: maxWidth,
+                ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     const SizedBox(height: 48),
-
-                    // Logo
                     Image.asset(
                       'assets/logo.png',
                       height: 254,
                       fit: BoxFit.contain,
                     ),
-
                     const SizedBox(height: 32),
-
                     Form(
                       key: _formKey,
                       child: Column(
                         children: [
-                          // Email Field
                           TextFormField(
                             controller: _emailCtrl,
                             keyboardType: TextInputType.emailAddress,
                             decoration: const InputDecoration(
                               labelText: 'Email',
-                              border: OutlineInputBorder(),
                               prefixIcon: Icon(Icons.email_outlined),
+                              border: OutlineInputBorder(),
                             ),
                             validator: (value) {
                               if (value == null || value.trim().isEmpty) {
@@ -128,18 +190,16 @@ class _LoginScreenState extends State<LoginScreen> {
                               return null;
                             },
                           ),
-
                           const SizedBox(height: 16),
-
-                          // Password Field with Eye Icon
                           TextFormField(
                             controller: _pwdCtrl,
                             obscureText: _obscurePassword,
                             decoration: InputDecoration(
                               labelText: 'Password',
                               border: const OutlineInputBorder(),
-                              prefixIcon:
-                                  const Icon(Icons.lock_outline_rounded),
+                              prefixIcon: const Icon(
+                                Icons.lock_outline_rounded,
+                              ),
                               suffixIcon: IconButton(
                                 icon: Icon(
                                   _obscurePassword
@@ -160,21 +220,18 @@ class _LoginScreenState extends State<LoginScreen> {
                               return null;
                             },
                           ),
-
-                          const SizedBox(height: 24),
-
+                          const SizedBox(height: 20),
                           if (_errorMsg != null)
                             Padding(
                               padding: const EdgeInsets.only(bottom: 12),
                               child: Text(
                                 _errorMsg!,
+                                textAlign: TextAlign.center,
                                 style: const TextStyle(
                                   color: Colors.red,
                                 ),
-                                textAlign: TextAlign.center,
                               ),
                             ),
-
                           SizedBox(
                             width: double.infinity,
                             child: FilledButton(
@@ -192,8 +249,17 @@ class _LoginScreenState extends State<LoginScreen> {
                                     )
                                   : const Text(
                                       'Sign In',
-                                      style: TextStyle(fontSize: 16),
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                      ),
                                     ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          TextButton(
+                            onPressed: _loading ? null : _resetPassword,
+                            child: const Text(
+                              'Forgot Password?',
                             ),
                           ),
                         ],

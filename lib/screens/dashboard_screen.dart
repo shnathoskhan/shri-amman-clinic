@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:shri_amman_clinic/theme.dart';
 import 'package:shri_amman_clinic/widgets/base_layout.dart';
 import 'package:intl/intl.dart';
 
@@ -75,6 +76,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
   List<FlSpot> _patientSpots = [];
   List<FlSpot> _reportSpots = [];
   double _chartIntervalY = 1.0;
+
+  Color get primaryColor => Theme.of(context).colorScheme.primary;
+  Color get secondaryColor => Theme.of(context).colorScheme.secondary;
+
+  Color get successColor => AppColors.success;
+  Color get warningColor => AppColors.warning;
+  Color get errorColor => AppColors.error;
+  Color get infoColor => AppColors.info;
 
   // ─── Lifecycle ──────────────────────────────────────────────────────────────
   @override
@@ -461,7 +470,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.5),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: Colors.black.withOpacity(0.06), width: 0.5),
       ),
@@ -484,28 +493,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
             child: LineChart(
               LineChartData(
                 lineBarsData: [
-                  // Patients line
+                  // Patients
                   LineChartBarData(
                     spots: _patientSpots,
                     isCurved: true,
-                    color: _purple,
+                    color: primaryColor,
                     barWidth: 2,
                     dotData: const FlDotData(show: false),
                     belowBarData: BarAreaData(
                       show: true,
-                      color: _purple.withOpacity(0.07),
+                      color: primaryColor.withOpacity(0.08),
                     ),
                   ),
-                  // Reports line
+
+                  // Reports
                   LineChartBarData(
                     spots: _reportSpots,
                     isCurved: true,
-                    color: _coral,
+                    color: secondaryColor,
                     barWidth: 2,
                     dotData: const FlDotData(show: false),
                     belowBarData: BarAreaData(
                       show: true,
-                      color: _coral.withOpacity(0.07),
+                      color: secondaryColor.withOpacity(0.08),
                     ),
                   ),
                 ],
@@ -514,7 +524,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   drawVerticalLine: false,
                   horizontalInterval: _chartIntervalY,
                   getDrawingHorizontalLine: (_) => FlLine(
-                    color: Colors.grey.withOpacity(0.1),
+                    color: Theme.of(context)
+                        .colorScheme
+                        .outlineVariant
+                        .withOpacity(0.3),
                     strokeWidth: 1,
                   ),
                 ),
@@ -528,7 +541,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         v.toInt().toString(),
                         style: TextStyle(
                           fontSize: 10,
-                          color: Colors.grey.shade500,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
                       ),
                     ),
@@ -546,15 +559,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 borderData: FlBorderData(show: false),
                 lineTouchData: LineTouchData(
                   touchTooltipData: LineTouchTooltipData(
+                    getTooltipColor: (_) => Colors.white,
                     getTooltipItems: (spots) => spots
-                        .map((s) => LineTooltipItem(
-                              s.y.toInt().toString(),
-                              TextStyle(
-                                color: s.barIndex == 0 ? _purple : _coral,
-                                fontWeight: FontWeight.w600,
-                                fontSize: 12,
-                              ),
-                            ))
+                        .map(
+                          (s) => LineTooltipItem(
+                            s.y.toInt().toString(),
+                            TextStyle(
+                              color: s.barIndex == 0
+                                  ? primaryColor
+                                  : secondaryColor,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 12,
+                            ),
+                          ),
+                        )
                         .toList(),
                   ),
                 ),
@@ -565,9 +583,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
           // Legend
           Row(
             children: [
-              _legendItem(color: _purple, label: 'Patients', dashed: false),
+              _legendItem(
+                  color: primaryColor, label: 'Patients', dashed: false),
               const SizedBox(width: 20),
-              _legendItem(color: _coral, label: 'Reports', dashed: false),
+              _legendItem(
+                  color: secondaryColor, label: 'Reports', dashed: false),
             ],
           ),
         ],
