@@ -129,6 +129,7 @@ class _AddReportDialogState extends State<_AddReportDialog> {
   bool _loading = true;
   String _status = 'Pending';
   String _paymentStatus = 'Pending';
+  DateTime? _sampleCollected;
 
   // Selections
   DocumentSnapshot? _selectedPatient;
@@ -285,6 +286,7 @@ class _AddReportDialogState extends State<_AddReportDialog> {
     _referralDr = data['referralDr'] as String? ?? '';
     _referralHospital = data['referralHospital'] as String? ?? '';
     _referralLab = data['referralLab'] as String? ?? '';
+    _sampleCollected = (data['sampleCollected'] as Timestamp?)?.toDate();
     try {
       _selectedDepartment = _departments
           .firstWhere((d) => (d.data() as Map)['name'] == data['department']);
@@ -475,6 +477,8 @@ class _AddReportDialogState extends State<_AddReportDialog> {
       'tests': _entries.map((e) => e.toMap()).toList(),
       'discount': double.tryParse(_discountCtrl.text.trim()) ?? 0.0,
       'discountMode': _discountMode,
+      if (_sampleCollected != null)
+        'sampleCollected': Timestamp.fromDate(_sampleCollected!),
     };
 
     try {
@@ -484,7 +488,10 @@ class _AddReportDialogState extends State<_AddReportDialog> {
         reportData['report_id'] = reportId;
         reportData['sid'] = sampleId;
         reportData['createdAt'] = FieldValue.serverTimestamp();
-        reportData['sampleCollected'] = FieldValue.serverTimestamp();
+        // Only set server timestamp if user did not pick a date
+        if (_sampleCollected == null) {
+          reportData['sampleCollected'] = FieldValue.serverTimestamp();
+        }
         final docRef = await FirebaseFirestore.instance
             .collection('reports')
             .add(reportData);
@@ -1099,6 +1106,31 @@ class _AddReportDialogState extends State<_AddReportDialog> {
     );
   }
 
+  Future<void> _selectSampleCollected(BuildContext context) async {
+    final initial = _sampleCollected ?? DateTime.now();
+    final pickedDate = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+    if (pickedDate == null || !context.mounted) return;
+    final pickedTime = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(initial),
+    );
+    if (!context.mounted) return;
+    setState(() {
+      _sampleCollected = DateTime(
+        pickedDate.year,
+        pickedDate.month,
+        pickedDate.day,
+        pickedTime?.hour ?? initial.hour,
+        pickedTime?.minute ?? initial.minute,
+      );
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -1465,34 +1497,56 @@ class _AddReportDialogState extends State<_AddReportDialog> {
 
                                       bool isValid(String s) =>
                                           s.isNotEmpty && s != '— None —';
-                                      String referValue = 'Self';
-                                      IconData referIcon = Icons.person_outline;
-                                      String referLabel = 'Referred By';
+                                      final hasDr = isValid(_referralDr);
+                                      final hasHospital =
+                                          isValid(_referralHospital);
+                                      final hasLab = isValid(_referralLab);
+                                      final hasAny =
+                                          hasDr || hasHospital || hasLab;
 
-                                      if (isValid(_referralDr)) {
-                                        referValue = _referralDr;
-                                        referIcon =
-                                            Icons.medical_services_outlined;
-                                        referLabel = 'Ref. Doctor';
-                                      } else if (isValid(_referralHospital)) {
-                                        referValue = _referralHospital;
-                                        referIcon =
-                                            Icons.local_hospital_outlined;
-                                        referLabel = 'Ref. Hospital';
-                                      } else if (isValid(_referralLab)) {
-                                        referValue = _referralLab;
-                                        referIcon = Icons.science_outlined;
-                                        referLabel = 'Ref. Lab';
+                                      if (!hasAny) {
+                                        return Row(
+                                          children: [
+                                            _patientInfoChip(
+                                                Icons.person_outline,
+                                                'Referred By',
+                                                'Self',
+                                                cs),
+                                            const SizedBox(width: 16),
+                                            const Expanded(
+                                                flex: 2,
+                                                child: SizedBox.shrink()),
+                                          ],
+                                        );
                                       }
 
                                       return Row(
                                         children: [
-                                          _patientInfoChip(referIcon,
-                                              referLabel, referValue, cs),
-                                          const SizedBox(width: 16),
-                                          const Expanded(
-                                              flex: 2,
-                                              child: SizedBox.shrink()),
+                                          if (hasDr)
+                                            _patientInfoChip(
+                                                Icons.medical_services_outlined,
+                                                'Ref. Doctor',
+                                                _referralDr,
+                                                cs),
+                                          if (hasDr && hasHospital)
+                                            const SizedBox(width: 16),
+                                          if (hasHospital)
+                                            _patientInfoChip(
+                                                Icons.local_hospital_outlined,
+                                                'Ref. Hospital',
+                                                _referralHospital,
+                                                cs),
+                                          if ((hasDr || hasHospital) && hasLab)
+                                            const SizedBox(width: 16),
+                                          if (hasLab)
+                                            _patientInfoChip(
+                                                Icons.science_outlined,
+                                                'Ref. Lab',
+                                                _referralLab,
+                                                cs),
+                                          if (!hasDr || !hasHospital || !hasLab)
+                                            const Expanded(
+                                                child: SizedBox.shrink()),
                                         ],
                                       );
                                     }),
@@ -1585,6 +1639,84 @@ class _AddReportDialogState extends State<_AddReportDialog> {
                           )
                         else
                           _buildSampleTypeSearch(),
+                        const SizedBox(height: 16),
+
+                        // Sample Collected timestamp
+                        InkWell(
+                          onTap: widget.isReadOnly
+                              ? null
+                              : () => _selectSampleCollected(context),
+                          borderRadius: BorderRadius.circular(8),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 12),
+                            decoration: BoxDecoration(
+                              color: cs.surfaceContainerLow,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: cs.outlineVariant),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.schedule_outlined,
+                                  size: 20,
+                                  color: cs.primary,
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Sample Collected',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: cs.onSurface
+                                              .withValues(alpha: 0.55),
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        _sampleCollected != null
+                                            ? DateFormat('dd/MM/yyyy  hh:mm a')
+                                                .format(_sampleCollected!)
+                                            : 'Not set',
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w600,
+                                          color: _sampleCollected != null
+                                              ? cs.onSurface
+                                              : cs.onSurface
+                                                  .withValues(alpha: 0.4),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                if (!widget.isReadOnly) ...[
+                                  if (_sampleCollected != null)
+                                    IconButton(
+                                      focusNode:
+                                          FocusNode(skipTraversal: true),
+                                      icon: const Icon(Icons.clear,
+                                          size: 18, color: Colors.red),
+                                      onPressed: () => setState(
+                                          () => _sampleCollected = null),
+                                    )
+                                  else
+                                    Icon(
+                                      Icons.edit_calendar_outlined,
+                                      size: 18,
+                                      color: cs.onSurface
+                                          .withValues(alpha: 0.4),
+                                    ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
                         const SizedBox(height: 24),
 
                         // 3. Department
